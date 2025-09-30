@@ -53,7 +53,7 @@ const Demo = () => {
         }}
       >
         <Image
-          src="/dashboard.png"
+          src="/image.png"
           alt="Demo"
           width={1200}
           height={800}
