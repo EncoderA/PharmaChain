@@ -1,0 +1,19 @@
+<svg
+        width="30"
+        height="30"
+        viewBox="0 0 30 30"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="flex-shrink-0"
+      >
+        <path
+          d="M15 2L6 5V13C6 19 10 24 15 26C20 24 24 19 24 13V5L15 2Z"
+          fill="#72e3ad"
+          stroke="#006239"
+          strokeWidth="1"
+        />
+        <rect x="13" y="8" width="4" height="12" rx="2" fill="white" />
+        <rect x="9" y="12" width="12" height="4" rx="2" fill="white" />
+        <circle cx="21" cy="21" r="3" fill="#10B981" stroke="white" strokeWidth="1.5" />
+        <path d="M19.5 21L20.5 22L22.5 20" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>

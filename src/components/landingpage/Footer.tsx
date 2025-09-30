@@ -122,10 +122,10 @@ export default function FooterSection() {
       <div className="mx-auto max-w-7xl px-6">
         <div className="grid gap-12 md:grid-cols-5">
           <div className="md:col-span-2">
-            <Link href="/" aria-label="go home" className="block size-fit">
+            {/* <Link href="/" aria-label="go home" className="block size-fit"> */}
               {/* <Logo /> */}
               <NavbarLogo />
-            </Link>
+            {/* </Link> */}
           </div>
 
           <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 md:col-span-3">
