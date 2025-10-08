@@ -37,7 +37,7 @@ export default function Home() {
       <Section>
         <CTA />
       </Section>
-      <div className="w-screen border-t mx-auto border-accent" />
+      <div className="w-full border-t  border-accent" />
       <Footer />
     </div>
   );
