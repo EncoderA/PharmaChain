@@ -8,6 +8,7 @@ import {
   PieChart,
   Receipt,
   Settings,
+ LayoutDashboard
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -35,7 +36,7 @@ const data = {
       title: "Dashboard",
       name: "Dashboard",
       url: "#",
-      icon: Frame,
+      icon: LayoutDashboard,
     },
     {
       title: "Products",
