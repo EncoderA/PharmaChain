@@ -1,7 +1,7 @@
-
+import DashBoard from '@/components/DashBoard/Dashboard'
 
 export default function Page() {
   return (
-    <div>fdsfd</div>
+    <DashBoard />
   )
 }
