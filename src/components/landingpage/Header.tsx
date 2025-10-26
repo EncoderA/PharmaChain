@@ -40,7 +40,7 @@ export function Header() {
         <div className="flex items-center space-x-2">
           
           <AnimatedThemeToggler  className="cursor-pointer"/>
-          <NavbarButton variant="primary" className="bg-primary text-foreground">Login</NavbarButton>
+          <NavbarButton href="/login" variant="primary" className="bg-primary text-foreground">Login</NavbarButton>
         </div>
       </NavBody>
 
@@ -65,7 +65,7 @@ export function Header() {
             </a>
           ))}
           <div className="mt-4 flex w-full flex-col space-y-2">
-            <NavbarButton variant="primary" className="w-full bg-primary text-foreground">
+            <NavbarButton href="/login" variant="primary" className="w-full bg-primary text-foreground">
               Login
             </NavbarButton>
           </div>

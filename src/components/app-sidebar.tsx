@@ -1,18 +1,19 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 import {
-  Command,
-  Frame,
   Map,
   PieChart,
   Receipt,
   Settings,
- LayoutDashboard
-} from "lucide-react"
+  LayoutDashboard,
+} from "lucide-react";
 
-import { NavMain } from "@/components/nav-main"
-import { NavUser } from "@/components/nav-user"
+import Link from "next/link";
+import Image from "next/image";
+
+import { NavMain } from "@/components/nav-main";
+import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -21,10 +22,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { NavbarLogo } from "./ui/resizable-navbar"
-import Image from "next/image"
+} from "@/components/ui/sidebar";
 
+// ✅ Keep static data OUTSIDE the component to avoid re-render mismatches
 const data = {
   user: {
     name: "shadcn",
@@ -32,49 +32,50 @@ const data = {
     avatar: "/avatars/shadcn.jpg",
   },
   navMain: [
-     {
+    {
       title: "Dashboard",
       name: "Dashboard",
-      url: "#",
+      url: "/dashboard",
       icon: LayoutDashboard,
     },
     {
       title: "Products",
       name: "Products",
-      url: "#",
+      url: "/dashboard/products",
       icon: PieChart,
     },
     {
       title: "Transactions",
       name: "Transactions",
-      url: "#",
+      url: "/dashboard/transactions",
       icon: Receipt,
     },
     {
       title: "Reports",
       name: "Reports",
-      url: "#",
+      url: "/dashboard/reports",
       icon: Map,
     },
     {
       title: "Settings",
       name: "Settings",
-      url: "#",
+      url: "/dashboard/settings",
       icon: Settings,
     },
   ],
- 
-}
+};
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
+      {/* --- HEADER / LOGO --- */}
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
-                <div className=" flex aspect-square size-8 items-center justify-center rounded-lg">
+              {/* ✅ Use Link (not <a href="#">) to avoid hydration issues */}
+              <Link href="/dashboard" className="flex items-center gap-3">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Image
                     src="/logo.svg"
                     alt="PharmaChain"
@@ -84,19 +85,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">PharmaChain</span>
-                  <span className="truncate text-xs">Manufactuer</span>
+                  <span className="truncate text-xs">Manufacturer</span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
+
+      {/* --- MAIN NAV LINKS --- */}
       <SidebarContent>
         <NavMain items={data.navMain} />
       </SidebarContent>
+
+      {/* --- USER FOOTER --- */}
       <SidebarFooter>
         <NavUser user={data.user} />
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

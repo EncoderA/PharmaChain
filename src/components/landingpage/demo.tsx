@@ -1,6 +1,7 @@
 "use client";
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import Image from "next/image";
 
 const Demo = () => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -19,14 +20,15 @@ const Demo = () => {
 
   return (
     <div
-      className='bg-secondary h-full p-6 relative overflow-hidden cursor-pointer'
+      className="bg-secondary h-full p-6 relative overflow-hidden cursor-pointer"
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
+      {/* Mouse spotlight effect */}
       {isMouseInside && (
         <motion.div
-          className="absolute w-8 h-8 bg-white/20 rounded-full blur-sm cursor-pointer z-10"
+          className="absolute w-8 h-8 bg-white/20 rounded-full blur-sm z-10 pointer-events-none"
           animate={{
             x: mousePosition.x - 16,
             y: mousePosition.y - 16,
@@ -40,6 +42,7 @@ const Demo = () => {
         />
       )}
 
+      {/* Parallax effect on image */}
       <motion.div
         animate={{
           x: isMouseInside ? (mousePosition.x - 600) * 0.05 : 0,
@@ -51,14 +54,14 @@ const Demo = () => {
           damping: 20,
         }}
       >
-        <video
-          src="/5750805-hd_1920_1080_24fps.mp4"
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="w-full h-auto rounded-2xl shadow-lg"
-        />
+        <div className="relative w-full h-[500px] rounded-2xl overflow-hidden shadow-lg">
+          <Image
+            src="/dm2.png" 
+            alt="Demo Image"
+            fill
+            className="object-fill"
+          />
+        </div>
       </motion.div>
     </div>
   );
