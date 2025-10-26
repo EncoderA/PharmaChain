@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import {
   Navbar,
   NavBody,
@@ -13,6 +13,7 @@ import {
   NavbarButton,
 } from "@/components/ui/resizable-navbar";
 import { AnimatedThemeToggler } from "@/components/ui/theme-toggle";
+import { useRouter } from "next/navigation";
 
 const navItems = [
   { name: "Home", link: "#home" },
@@ -22,6 +23,7 @@ const navItems = [
 ];
 
 export function Header() {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
   const handleToggle = () => {
@@ -38,9 +40,14 @@ export function Header() {
         <NavbarLogo />
         <NavItems items={navItems} onItemClick={handleItemClick} />
         <div className="flex items-center space-x-2">
-          
-          <AnimatedThemeToggler  className="cursor-pointer"/>
-          <NavbarButton variant="primary" className="bg-primary text-foreground">Login</NavbarButton>
+          <AnimatedThemeToggler className="cursor-pointer" />
+          <NavbarButton
+            onClick={() => router.push("/login")}
+            variant="primary"
+            className="bg-primary text-foreground"
+          >
+            Login
+          </NavbarButton>
         </div>
       </NavBody>
 
@@ -65,7 +72,11 @@ export function Header() {
             </a>
           ))}
           <div className="mt-4 flex w-full flex-col space-y-2">
-            <NavbarButton variant="primary" className="w-full bg-primary text-foreground">
+            <NavbarButton
+              onClick={() => router.push("/login")}
+              variant="primary"
+              className="w-full bg-primary text-foreground"
+            >
               Login
             </NavbarButton>
           </div>

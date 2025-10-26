@@ -2,8 +2,6 @@
 
 import * as React from "react"
 import {
-  Command,
-  Frame,
   Map,
   PieChart,
   Receipt,
@@ -22,8 +20,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { NavbarLogo } from "./ui/resizable-navbar"
 import Image from "next/image"
+import { usePathname } from "next/navigation"
 
 const data = {
   user: {
@@ -35,31 +33,31 @@ const data = {
      {
       title: "Dashboard",
       name: "Dashboard",
-      url: "#",
+      url: "/dashboard",
       icon: LayoutDashboard,
     },
     {
       title: "Products",
       name: "Products",
-      url: "#",
+      url: "/products",
       icon: PieChart,
     },
     {
       title: "Transactions",
       name: "Transactions",
-      url: "#",
+      url: "/transactions",
       icon: Receipt,
     },
     {
       title: "Reports",
       name: "Reports",
-      url: "#",
+      url: "/reports",
       icon: Map,
     },
     {
       title: "Settings",
       name: "Settings",
-      url: "#",
+      url: "/settings",
       icon: Settings,
     },
   ],
@@ -67,6 +65,13 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname()
+
+  const navMainWithActive = data.navMain.map((item) => ({
+    ...item, 
+    isActive: pathname.startsWith(item.url),
+  }))
+  console.log("Current Pathname:", pathname, navMainWithActive)
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
       <SidebarHeader>
@@ -92,7 +97,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navMainWithActive} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

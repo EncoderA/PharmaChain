@@ -21,8 +21,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>
+    <main lang="en" suppressHydrationWarning>
+      <div>
         <SidebarProvider>
           <AppSidebar />
           <SidebarInset>
@@ -54,7 +54,7 @@ export default function RootLayout({
             {children}
           </SidebarInset>
         </SidebarProvider>
-      </body>
-    </html>
+      </div>
+    </main>
   );
 }

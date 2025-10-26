@@ -29,10 +29,10 @@ export function NavMain({
     isActive?: boolean
     items?: {
       title: string
-      url: string
+      url: string     
     }[]
   }[]
-}) {
+}) {  
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -40,7 +40,7 @@ export function NavMain({
         {items.map((item) => (
           <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip={item.title}>
+              <SidebarMenuButton asChild tooltip={item.title} className={item.isActive ? "bg-accent/50" : ""}>
                 <a href={item.url}>
                   <item.icon />
                   <span>{item.title}</span>
