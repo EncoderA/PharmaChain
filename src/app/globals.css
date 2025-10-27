@@ -220,3 +220,25 @@ body {
 .animate-star-movement-top {
   animation: star-movement-top linear infinite alternate;
 }
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CCCCCC;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a7a4a4;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}

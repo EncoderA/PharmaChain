@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CheckIcon, Plus, PlusIcon, QrCode, ShoppingCart, Verified, WarehouseIcon } from "lucide-react";
+import { CheckIcon, PlusIcon, QrCode, ShoppingCart, Verified, WarehouseIcon } from "lucide-react";
 import Calendar27 from "./BarChart";
 
 export default function SupplyChainDashboard() {
@@ -56,42 +56,10 @@ export default function SupplyChainDashboard() {
   ];
 
   return (
-    <div className="flex-1 bg-background min-h-screen">
+    <div className="flex-1 bg-background">
       <div className="p-6 space-y-6">
         <div className="flex items-center gap-4 flex-wrap">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button className="flex items-center gap-2 rounded-lg">
-                <Plus />
-                Add Product
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Add New Product</DialogTitle>
-                <DialogDescription>
-                  Fill in the details of the new product.
-                </DialogDescription>
-              </DialogHeader>
-              <form className="space-y-4 mt-4">
-                <div>
-                  <Label className="mb-1 block">Product Name</Label>
-                  <Input placeholder="Enter product name" />
-                </div>
-                <div>
-                  <Label className="mb-1 block">Batch Number</Label>
-                  <Input placeholder="Enter batch number" />
-                </div>
-                <div>
-                  <Label className="mb-1 block">Manufacturer</Label>
-                  <Input placeholder="Enter manufacturer name" />
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit">Save Product</Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          
 
           <Dialog>
             <DialogTrigger asChild>
