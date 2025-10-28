@@ -7,6 +7,7 @@ import {
   Receipt,
   Settings,
   LayoutDashboard,
+  User,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -58,10 +59,10 @@ const data = {
       icon: Map,
     },
     {
-      title: "Settings",
-      name: "Settings",
-      url: "/settings",
-      icon: Settings,
+      title: "User Management",
+      name: "User Management",
+      url: "/users",
+      icon: User,
     },
   ],
 };
@@ -91,7 +92,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     height={32}
                   />
                 </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
+                <div className="grid flex-1 text-foreground text-left text-sm leading-tight">
                   <span className="truncate font-medium">PharmaChain</span>
                   <span className="truncate text-xs">Manufacturer</span>
                 </div>

@@ -65,7 +65,7 @@ export default function SupplyChainDashboard() {
             <DialogTrigger asChild>
               <Button
                 variant="secondary"
-                className="flex items-center gap-2 rounded-lg"
+                className="flex items-center gap-2 rounded-lg shadow-sm"
               >
                 <QrCode />
                 Track Product
@@ -94,7 +94,7 @@ export default function SupplyChainDashboard() {
             <DialogTrigger asChild>
               <Button
                 variant="secondary"
-                className="flex items-center gap-2 rounded-lg"
+                className="flex items-center gap-2 rounded-lg shadow-sm"
               >
                 <Verified />
                 Verify Authenticity
@@ -144,7 +144,7 @@ export default function SupplyChainDashboard() {
             <Calendar27 />
           </div>
 
-          <div className="bg-card p-6 rounded-xl border border-border">
+          <div className="bg-card p-6 rounded-xl shadow-sm border border-border">
             <h3 className="text-lg font-semibold text-foreground mb-4">
               Supply Chain Activity
             </h3>

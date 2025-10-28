@@ -37,16 +37,16 @@ export function NavMain({
 }) {  
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Platform</SidebarGroupLabel>
+      <SidebarGroupLabel className="text-foreground">Platform</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip={item.title} className={item.isActive ? "bg-accent/50" : ""}>
-                <a href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </a>
+              <SidebarMenuButton asChild tooltip={item.title} className={item.isActive ? "bg-accent/50 shadow-sm" : ""}>
+                <Link href={item.url}>
+                  <item.icon className="text-foreground"/>
+                  <span className="text-foreground">{item.title}</span>
+                </Link>
               </SidebarMenuButton>
 
               {item.items?.length ? (

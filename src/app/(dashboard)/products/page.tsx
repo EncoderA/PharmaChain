@@ -43,8 +43,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
 
-interface Product {
+export interface Product {    
   id: string;
   name: string;
   manufacturer: string;
@@ -61,6 +62,7 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const router = useRouter();
 
   const products: Product[] = [
     {
@@ -151,18 +153,18 @@ export default function ProductsPage() {
     return { label: "In Stock", className: "text-green-600" };
   };
 
-  const handleViewDetails = (product: Product) => {
+  const handleViewDetails = (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
     setSelectedProduct(product);
   };
 
   const handleExportData = () => {
-    // In a real app, this would generate a CSV file
     console.log("Exporting products data...");
   };
 
   return (
     <div className="flex-1 p-6 bg-background text-foreground space-y-6">
-      {/* Header Section */}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Products</h1>
@@ -325,7 +327,7 @@ export default function ProductsPage() {
                     Last Updated
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Actions
+                    View Details
                   </th>
                 </tr>
               </thead>
@@ -335,7 +337,8 @@ export default function ProductsPage() {
                   return (
                     <tr
                       key={product.id}
-                      className="border-b border-border hover:bg-muted/20"
+                      className="border-b border-border cursor-pointer hover:bg-muted/20"
+                      onClick={() => router.push(`/products/${product.id}`)}
                     >
                       <td className="px-4 py-3">
                         <div>
@@ -343,7 +346,7 @@ export default function ProductsPage() {
                           <div className="text-xs text-muted-foreground">
                             {product.id}
                           </div>
-                          <div className="text-xs text-blue-600">
+                          <div className="text-xs text-primary">
                             {product.category}
                           </div>
                         </div>
@@ -375,7 +378,7 @@ export default function ProductsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleViewDetails(product)}
+                                onClick={(e) => handleViewDetails(product,e)}
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>

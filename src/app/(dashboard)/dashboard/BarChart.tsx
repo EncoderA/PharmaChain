@@ -89,9 +89,9 @@ export default function Calendar27() {
   return (
     <Card className="@container/card w-full">
       <CardHeader className="flex flex-col border-b @md/card:grid">
-        <CardTitle>Web Analytics</CardTitle>
+        <CardTitle>Pharma Chain Analytics</CardTitle>
         <CardDescription>
-          Showing total visitors for this month.
+          Showing total sales for this month.
         </CardDescription>
         <CardAction className="mt-2 @md/card:mt-0">
           <Popover>

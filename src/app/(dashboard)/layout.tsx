@@ -1,4 +1,5 @@
 import { AppSidebar } from "@/components/app-sidebar";
+import { DynamicBreadcrumb } from "@/components/dynamic-breadcrumb";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -34,19 +35,7 @@ export default function RootLayout({
                   className="mr-2 data-[orientation=vertical]:h-4"
                 />
                 <div className="flex justify-between gap-3 items-center w-full">
-                  <Breadcrumb>
-                    <BreadcrumbList>
-                      <BreadcrumbItem className="hidden md:block">
-                        <BreadcrumbLink href="#">
-                          Building Your Application
-                        </BreadcrumbLink>
-                      </BreadcrumbItem>
-                      <BreadcrumbSeparator className="hidden md:block" />
-                      <BreadcrumbItem>
-                        <BreadcrumbPage>Data Fetching</BreadcrumbPage>
-                      </BreadcrumbItem>
-                    </BreadcrumbList>
-                  </Breadcrumb>
+                  <DynamicBreadcrumb />
                   <AnimatedThemeToggler />
                 </div>
               </div>

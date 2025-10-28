@@ -42,6 +42,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ViewTransactionButton } from "@/components/products/view-transaction-button";
 
 interface Transaction {
   txId: string;
@@ -371,13 +372,7 @@ export default function TransactionsPage() {
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedTx(tx)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                              <ViewTransactionButton txHash={tx.txId} />
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>View Details</p>
@@ -399,131 +394,6 @@ export default function TransactionsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Transaction Details Modal */}
-      <Dialog
-        open={!!selectedTx}
-        onOpenChange={(open) => !open && setSelectedTx(null)}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Transaction Details</DialogTitle>
-            <DialogDescription>
-              Detailed information about the blockchain transaction
-            </DialogDescription>
-          </DialogHeader>
-          {selectedTx && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Transaction Hash
-                  </label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p className="text-sm font-mono break-all">
-                      {selectedTx.txId}
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() =>
-                        copyToClipboard(selectedTx.txId, selectedTx.txId)
-                      }
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Status
-                  </label>
-                  <div className="mt-1">
-                    {(() => {
-                      const statusConfig = getStatusConfig(selectedTx.status);
-                      const Icon = statusConfig.icon;
-                      return (
-                        <Badge
-                          variant={statusConfig.variant}
-                          className="flex items-center gap-1 w-fit"
-                        >
-                          <Icon className="h-3 w-3" />
-                          {statusConfig.label}
-                        </Badge>
-                      );
-                    })()}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Product ID
-                  </label>
-                  <p className="text-sm mt-1">{selectedTx.productId}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Batch
-                  </label>
-                  <p className="text-sm mt-1">{selectedTx.batch}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    From
-                  </label>
-                  <p className="text-sm mt-1">{selectedTx.from}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    To
-                  </label>
-                  <p className="text-sm mt-1">{selectedTx.to}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Block Number
-                  </label>
-                  <p className="text-sm font-mono mt-1">
-                    {selectedTx.block.toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Gas Used
-                  </label>
-                  <p className="text-sm mt-1">
-                    {selectedTx.gasUsed.toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Action
-                  </label>
-                  <p className="text-sm mt-1">{selectedTx.action}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Value
-                  </label>
-                  <p className="text-sm mt-1">{selectedTx.value}</p>
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Timestamp
-                </label>
-                <p className="text-sm mt-1">{selectedTx.timestamp}</p>
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setSelectedTx(null)}>
-                  Close
-                </Button>
-                <Button>View on Explorer</Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
