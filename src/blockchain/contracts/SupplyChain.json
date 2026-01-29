@@ -1,0 +1,1208 @@
+[
+		{
+			"inputs": [],
+			"name": "AlreadyApproved",
+			"type": "error"
+		},
+		{
+			"inputs": [],
+			"name": "AlreadyRequested",
+			"type": "error"
+		},
+		{
+			"inputs": [],
+			"name": "DrugExpired",
+			"type": "error"
+		},
+		{
+			"inputs": [],
+			"name": "InvalidStage",
+			"type": "error"
+		},
+		{
+			"inputs": [],
+			"name": "NoRequest",
+			"type": "error"
+		},
+		{
+			"inputs": [],
+			"name": "NotAuthorized",
+			"type": "error"
+		},
+		{
+			"inputs": [],
+			"name": "NotOwner",
+			"type": "error"
+		},
+		{
+			"inputs": [],
+			"name": "Rejected",
+			"type": "error"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "AdminAdded",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "AdminRemoved",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "DistributorAdded",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "DistributorRemoved",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "DrugBroadcastedToWholesalers",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "DrugRegistered",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "rejectedBy",
+					"type": "address"
+				}
+			],
+			"name": "DrugRejected",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "distributor",
+					"type": "address"
+				}
+			],
+			"name": "DrugRequested",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "wholesaler",
+					"type": "address"
+				}
+			],
+			"name": "DrugRequestedByWholesaler",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "distributor",
+					"type": "address"
+				}
+			],
+			"name": "DrugTransferred",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "wholesaler",
+					"type": "address"
+				}
+			],
+			"name": "DrugTransferredToWholesaler",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "ManufacturerAdded",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "ManufacturerRemoved",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"indexed": false,
+					"internalType": "enum Stage",
+					"name": "stage",
+					"type": "uint8"
+				}
+			],
+			"name": "StageUpdated",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "WholesalerAdded",
+			"type": "event"
+		},
+		{
+			"anonymous": false,
+			"inputs": [
+				{
+					"indexed": true,
+					"internalType": "address",
+					"name": "account",
+					"type": "address"
+				}
+			],
+			"name": "WholesalerRemoved",
+			"type": "event"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "addAdmin",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "addDistributor",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "addManufacturer",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "addWholesaler",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "approveDistributor",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "approveWholesaler",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"name": "distributorRequests",
+			"outputs": [
+				{
+					"internalType": "address",
+					"name": "distributor",
+					"type": "address"
+				},
+				{
+					"internalType": "bool",
+					"name": "approved",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "drugCounter",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"name": "drugs",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "address",
+					"name": "manufacturer",
+					"type": "address"
+				},
+				{
+					"internalType": "address",
+					"name": "currentOwner",
+					"type": "address"
+				},
+				{
+					"internalType": "uint64",
+					"name": "manufacturingDate",
+					"type": "uint64"
+				},
+				{
+					"internalType": "uint64",
+					"name": "expiryDate",
+					"type": "uint64"
+				},
+				{
+					"internalType": "enum Stage",
+					"name": "stage",
+					"type": "uint8"
+				},
+				{
+					"internalType": "bool",
+					"name": "isRejected",
+					"type": "bool"
+				},
+				{
+					"internalType": "string",
+					"name": "name",
+					"type": "string"
+				},
+				{
+					"internalType": "string",
+					"name": "customerName",
+					"type": "string"
+				},
+				{
+					"internalType": "bytes32",
+					"name": "qrHash",
+					"type": "bytes32"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getAdmins",
+			"outputs": [
+				{
+					"internalType": "address[]",
+					"name": "",
+					"type": "address[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getAllDistributorRequests",
+			"outputs": [
+				{
+					"components": [
+						{
+							"internalType": "uint256",
+							"name": "drugId",
+							"type": "uint256"
+						},
+						{
+							"internalType": "string",
+							"name": "name",
+							"type": "string"
+						},
+						{
+							"internalType": "address",
+							"name": "distributor",
+							"type": "address"
+						},
+						{
+							"internalType": "bool",
+							"name": "approved",
+							"type": "bool"
+						}
+					],
+					"internalType": "struct SupplyChain.DistributorRequestView[]",
+					"name": "",
+					"type": "tuple[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getAvailableDrugsForDistributor",
+			"outputs": [
+				{
+					"components": [
+						{
+							"internalType": "uint256",
+							"name": "drugId",
+							"type": "uint256"
+						},
+						{
+							"internalType": "address",
+							"name": "manufacturer",
+							"type": "address"
+						},
+						{
+							"internalType": "address",
+							"name": "currentOwner",
+							"type": "address"
+						},
+						{
+							"internalType": "uint64",
+							"name": "manufacturingDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "uint64",
+							"name": "expiryDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "enum Stage",
+							"name": "stage",
+							"type": "uint8"
+						},
+						{
+							"internalType": "bool",
+							"name": "isRejected",
+							"type": "bool"
+						},
+						{
+							"internalType": "string",
+							"name": "name",
+							"type": "string"
+						},
+						{
+							"internalType": "string",
+							"name": "customerName",
+							"type": "string"
+						},
+						{
+							"internalType": "bytes32",
+							"name": "qrHash",
+							"type": "bytes32"
+						}
+					],
+					"internalType": "struct Drug[]",
+					"name": "",
+					"type": "tuple[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getAvailableDrugsForWholesaler",
+			"outputs": [
+				{
+					"components": [
+						{
+							"internalType": "uint256",
+							"name": "drugId",
+							"type": "uint256"
+						},
+						{
+							"internalType": "address",
+							"name": "manufacturer",
+							"type": "address"
+						},
+						{
+							"internalType": "address",
+							"name": "currentOwner",
+							"type": "address"
+						},
+						{
+							"internalType": "uint64",
+							"name": "manufacturingDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "uint64",
+							"name": "expiryDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "enum Stage",
+							"name": "stage",
+							"type": "uint8"
+						},
+						{
+							"internalType": "bool",
+							"name": "isRejected",
+							"type": "bool"
+						},
+						{
+							"internalType": "string",
+							"name": "name",
+							"type": "string"
+						},
+						{
+							"internalType": "string",
+							"name": "customerName",
+							"type": "string"
+						},
+						{
+							"internalType": "bytes32",
+							"name": "qrHash",
+							"type": "bytes32"
+						}
+					],
+					"internalType": "struct Drug[]",
+					"name": "",
+					"type": "tuple[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getDistributors",
+			"outputs": [
+				{
+					"internalType": "address[]",
+					"name": "",
+					"type": "address[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getManufacturers",
+			"outputs": [
+				{
+					"internalType": "address[]",
+					"name": "",
+					"type": "address[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getMyDrugs",
+			"outputs": [
+				{
+					"components": [
+						{
+							"internalType": "uint256",
+							"name": "drugId",
+							"type": "uint256"
+						},
+						{
+							"internalType": "address",
+							"name": "manufacturer",
+							"type": "address"
+						},
+						{
+							"internalType": "address",
+							"name": "currentOwner",
+							"type": "address"
+						},
+						{
+							"internalType": "uint64",
+							"name": "manufacturingDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "uint64",
+							"name": "expiryDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "enum Stage",
+							"name": "stage",
+							"type": "uint8"
+						},
+						{
+							"internalType": "bool",
+							"name": "isRejected",
+							"type": "bool"
+						},
+						{
+							"internalType": "string",
+							"name": "name",
+							"type": "string"
+						},
+						{
+							"internalType": "string",
+							"name": "customerName",
+							"type": "string"
+						},
+						{
+							"internalType": "bytes32",
+							"name": "qrHash",
+							"type": "bytes32"
+						}
+					],
+					"internalType": "struct Drug[]",
+					"name": "",
+					"type": "tuple[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getMyWholesalerDrugs",
+			"outputs": [
+				{
+					"components": [
+						{
+							"internalType": "uint256",
+							"name": "drugId",
+							"type": "uint256"
+						},
+						{
+							"internalType": "address",
+							"name": "manufacturer",
+							"type": "address"
+						},
+						{
+							"internalType": "address",
+							"name": "currentOwner",
+							"type": "address"
+						},
+						{
+							"internalType": "uint64",
+							"name": "manufacturingDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "uint64",
+							"name": "expiryDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "enum Stage",
+							"name": "stage",
+							"type": "uint8"
+						},
+						{
+							"internalType": "bool",
+							"name": "isRejected",
+							"type": "bool"
+						},
+						{
+							"internalType": "string",
+							"name": "name",
+							"type": "string"
+						},
+						{
+							"internalType": "string",
+							"name": "customerName",
+							"type": "string"
+						},
+						{
+							"internalType": "bytes32",
+							"name": "qrHash",
+							"type": "bytes32"
+						}
+					],
+					"internalType": "struct Drug[]",
+					"name": "",
+					"type": "tuple[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getWholesalerRequests",
+			"outputs": [
+				{
+					"components": [
+						{
+							"internalType": "uint256",
+							"name": "drugId",
+							"type": "uint256"
+						},
+						{
+							"internalType": "string",
+							"name": "name",
+							"type": "string"
+						},
+						{
+							"internalType": "address",
+							"name": "wholesaler",
+							"type": "address"
+						},
+						{
+							"internalType": "bool",
+							"name": "approved",
+							"type": "bool"
+						}
+					],
+					"internalType": "struct SupplyChain.WholesalerRequestView[]",
+					"name": "",
+					"type": "tuple[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getWholesalers",
+			"outputs": [
+				{
+					"internalType": "address[]",
+					"name": "",
+					"type": "address[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"name": "ownershipHistory",
+			"outputs": [
+				{
+					"internalType": "address",
+					"name": "",
+					"type": "address"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "string",
+					"name": "_name",
+					"type": "string"
+				},
+				{
+					"internalType": "uint64",
+					"name": "_manufacturingDate",
+					"type": "uint64"
+				},
+				{
+					"internalType": "uint64",
+					"name": "_expiryDate",
+					"type": "uint64"
+				},
+				{
+					"internalType": "bytes32",
+					"name": "_qrHash",
+					"type": "bytes32"
+				}
+			],
+			"name": "registerDrug",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "rejectDrug",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "removeAdmin",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "removeDistributor",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "removeManufacturer",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_addr",
+					"type": "address"
+				}
+			],
+			"name": "removeWholesaler",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "requestDrug",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "requestDrugFromDistributor",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "string",
+					"name": "_customerName",
+					"type": "string"
+				}
+			],
+			"name": "sellToCustomer",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "sendDrugToAllWholesalers",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				}
+			],
+			"name": "verifyDrug",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "isValid",
+					"type": "bool"
+				},
+				{
+					"internalType": "uint256",
+					"name": "drugId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "string",
+					"name": "name",
+					"type": "string"
+				},
+				{
+					"internalType": "address",
+					"name": "manufacturer",
+					"type": "address"
+				},
+				{
+					"internalType": "address",
+					"name": "currentOwner",
+					"type": "address"
+				},
+				{
+					"internalType": "enum Stage",
+					"name": "stage",
+					"type": "uint8"
+				},
+				{
+					"internalType": "bool",
+					"name": "isExpired",
+					"type": "bool"
+				},
+				{
+					"internalType": "bool",
+					"name": "isRejected",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_drugId",
+					"type": "uint256"
+				},
+				{
+					"internalType": "bytes32",
+					"name": "_scannedHash",
+					"type": "bytes32"
+				}
+			],
+			"name": "verifyDrugByQR",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "isAuthentic",
+					"type": "bool"
+				},
+				{
+					"internalType": "bool",
+					"name": "isExpired",
+					"type": "bool"
+				},
+				{
+					"internalType": "bool",
+					"name": "isRejected",
+					"type": "bool"
+				},
+				{
+					"internalType": "enum Stage",
+					"name": "stage",
+					"type": "uint8"
+				},
+				{
+					"internalType": "address",
+					"name": "currentOwner",
+					"type": "address"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "viewBroadcastedDrugs",
+			"outputs": [
+				{
+					"components": [
+						{
+							"internalType": "uint256",
+							"name": "drugId",
+							"type": "uint256"
+						},
+						{
+							"internalType": "address",
+							"name": "manufacturer",
+							"type": "address"
+						},
+						{
+							"internalType": "address",
+							"name": "currentOwner",
+							"type": "address"
+						},
+						{
+							"internalType": "uint64",
+							"name": "manufacturingDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "uint64",
+							"name": "expiryDate",
+							"type": "uint64"
+						},
+						{
+							"internalType": "enum Stage",
+							"name": "stage",
+							"type": "uint8"
+						},
+						{
+							"internalType": "bool",
+							"name": "isRejected",
+							"type": "bool"
+						},
+						{
+							"internalType": "string",
+							"name": "name",
+							"type": "string"
+						},
+						{
+							"internalType": "string",
+							"name": "customerName",
+							"type": "string"
+						},
+						{
+							"internalType": "bytes32",
+							"name": "qrHash",
+							"type": "bytes32"
+						}
+					],
+					"internalType": "struct Drug[]",
+					"name": "",
+					"type": "tuple[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "",
+					"type": "uint256"
+				}
+			],
+			"name": "wholesalerRequests",
+			"outputs": [
+				{
+					"internalType": "address",
+					"name": "wholesaler",
+					"type": "address"
+				},
+				{
+					"internalType": "bool",
+					"name": "approved",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		}
+	]
