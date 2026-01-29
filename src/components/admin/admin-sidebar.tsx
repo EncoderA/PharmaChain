@@ -11,6 +11,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 import {
   Sidebar,
   SidebarContent,
@@ -53,14 +54,34 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b">
-        <div className="flex items-center gap-2 px-4 py-3">
-          <Shield className="h-6 w-6 text-primary" />
-          <h1 className="text-lg font-bold">Admin Panel</h1>
-        </div>
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link
+                href="/admin"
+                className="flex items-center gap-3 w-full px-4 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0"
+              >
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-transparent">
+                  <Image
+                    src="/logo.svg"
+                    alt="PharmaChain"
+                    width={30}
+                    height={30}
+                    className="object-contain"
+                  />
+                </div>
+                <div className="grid flex-1 text-foreground text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                  <span className="truncate font-medium text-foreground">Admin Panel</span>
+                  <span className="truncate text-xs text-foreground/70">Management</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="pt-2">
         <SidebarMenu>
           {menuItems.map((item) => {
             const Icon = item.icon;
@@ -69,10 +90,13 @@ export function AdminSidebar() {
             return (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton asChild isActive={isActive}>
-                  <Link href={item.href} className="flex items-center gap-3">
-                    <Icon className="h-4 w-4" />
-                    <span>{item.title}</span>
-                  </Link>
+                    <Link
+                      href={item.href}
+                      className="flex items-center gap-3 w-full px-4 py-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:px-0"
+                    >
+                      <Icon className="h-5 w-5 text-foreground/95" />
+                      <span className="ml-2 group-data-[collapsible=icon]:hidden text-foreground">{item.title}</span>
+                    </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             );
