@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import db from "@/db/index";
 import { usersTable } from "@/db/schema";
 import { ca } from "date-fns/locale";
+import { eq } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -32,6 +33,30 @@ export async function POST(req: Request) {
         { error: "Missing required fields" },
         { status: 400 },
       );
+    }
+
+    // Check duplicates by walletId or email
+    try {
+      const existingByWallet = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.walletId, body.walletId));
+
+      if (existingByWallet && existingByWallet.length > 0) {
+        return NextResponse.json({ error: "User with this wallet already exists" }, { status: 409 });
+      }
+
+      const existingByEmail = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.email, body.email));
+
+      if (existingByEmail && existingByEmail.length > 0) {
+        return NextResponse.json({ error: "User with this email already exists" }, { status: 409 });
+      }
+    } catch (dbErr) {
+      console.error("Error checking existing user:", dbErr);
+      // continue to insertion attempt which will surface errors
     }
 
     await db.insert(usersTable).values({
