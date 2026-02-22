@@ -4,10 +4,32 @@ import { usersTable } from "@/db/schema";
 import { ca } from "date-fns/locale";
 import { eq } from "drizzle-orm";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const allUsers = await db.select().from(usersTable);
-    return NextResponse.json(allUsers);
+    const { searchParams } = new URL(req.url);
+    const email = searchParams.get("email");
+    const walletId = searchParams.get("walletId");
+
+    if (email) {
+      const users = await db.select().from(usersTable).where(eq(usersTable.email, email));
+      if (users.length > 0) {
+        return NextResponse.json({ exists: true, reason: "email" });
+      }
+    }
+
+    if (walletId) {
+      const users = await db.select().from(usersTable).where(eq(usersTable.walletId, walletId));
+      if (users.length > 0) {
+        return NextResponse.json({ exists: true, reason: "wallet" });
+      }
+    }
+
+    if (!email && !walletId) {
+      const allUsers = await db.select().from(usersTable);
+      return NextResponse.json(allUsers);
+    }
+
+    return NextResponse.json({ exists: false });
   } catch (error) {
     console.error("Error fetching users:", error);
     return NextResponse.json(

@@ -50,7 +50,16 @@ export function AddUserDialog() {
     formState: { errors },
   } = useForm<Inputs>();
 
-  const { addAdmin, addManufacturer, addDistributor, addWholesaler, getAdmins } = useSupplyChainContract();
+  const {
+    addAdmin,
+    addManufacturer,
+    addDistributor,
+    addWholesaler,
+    getAdmins,
+    getManufacturers,
+    getDistributors,
+    getWholesalers
+  } = useSupplyChainContract();
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -84,8 +93,40 @@ export function AddUserDialog() {
         throw new Error("Only admin users can add new users on-chain/off-chain");
       }
 
-      // call on-chain role function if available
+      // Off-chain check: check email address
+      const checkRes = await axios.get(`/api/user?email=${encodeURIComponent(data.email)}&walletId=${encodeURIComponent(data.walletId)}`);
+      if (checkRes.data.exists) {
+        if (checkRes.data.reason === "email") {
+          throw new Error("Off-chain check failed: User already exist with this email address");
+        } else {
+          throw new Error("Off-chain check failed: User already exist with this wallet address");
+        }
+      }
+
+      // On-chain check: check wallet address
       const role = data.role;
+      const normalizedWallet = data.walletId.toLowerCase();
+      let onChainExists = false;
+
+      if (role === "admin") {
+        const admins = await getAdmins();
+        if (admins && admins.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      } else if (role === "manufacturer") {
+        const manufacturers = await getManufacturers();
+        if (manufacturers && manufacturers.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      } else if (role === "distributor") {
+        const distributors = await getDistributors();
+        if (distributors && distributors.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      } else if (role === "wholesaler") {
+        const wholesalers = await getWholesalers();
+        if (wholesalers && wholesalers.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      }
+
+      if (onChainExists) {
+        throw new Error("On-chain check failed: User already exist with this wallet address and role");
+      }
+
+      // call on-chain role function if available
       if (role === "admin") {
         await addAdmin(data.walletId);
       } else if (role === "manufacturer") {
@@ -140,7 +181,7 @@ export function AddUserDialog() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-           {!isAdminUser && (
+          {!isAdminUser && (
             <div className="text-sm text-red-600">Only connected admin wallets can add users.</div>
           )}
           {/* Full Name */}
@@ -188,7 +229,7 @@ export function AddUserDialog() {
             />
           </div>
 
-         
+
 
           <div className="space-y-2">
             <Label>Company/Organization</Label>
