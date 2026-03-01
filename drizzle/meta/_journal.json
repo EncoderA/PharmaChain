@@ -8,6 +8,13 @@
       "when": 1771662629524,
       "tag": "0000_gorgeous_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772091528875,
+      "tag": "0001_fine_wrecking_crew",
+      "breakpoints": true
     }
   ]
 }
