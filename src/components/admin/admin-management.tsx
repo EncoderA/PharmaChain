@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -25,9 +26,26 @@ import { AlertCircle, Trash2, Plus } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
+interface AdminRecord {
+  address: string;
+  name: string;
+  email: string;
+  organization: string;
+  department: string;
+  phone: string;
+  idNumber: string;
+  dateAdded: string;
+}
+
 export function AdminManagement() {
-  const [admins, setAdmins] = useState<string[]>([]);
+  const [admins, setAdmins] = useState<AdminRecord[]>([]);
   const [newAdminAddress, setNewAdminAddress] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [email, setEmail] = useState("");
+  const [department, setDepartment] = useState("");
+  const [organization, setOrganization] = useState("");
+  const [phone, setPhone] = useState("");
+  const [IDNumber, setIDNumber] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +57,17 @@ export function AdminManagement() {
     const fetchAdmins = async () => {
       try {
         const adminsList = await getAdmins();
-        setAdmins(adminsList || []);
+        const adminRecords: AdminRecord[] = (adminsList || []).map((address: string) => ({
+          address,
+          name: "Dr. Admin User",
+          email: "admin@pharma.com",
+          organization: "Pharma Corp Ltd.",
+          department: "Supply Chain Management",
+          phone: "9876543210",
+          idNumber: "PH-2026-" + Math.random().toString().slice(2, 7),
+          dateAdded: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toLocaleDateString("en-GB")
+        }));
+        setAdmins(adminRecords);
       } catch (err) {
         console.error("Failed to fetch admins:", err);
       }
@@ -57,18 +85,37 @@ export function AdminManagement() {
         throw new Error("Invalid Ethereum address format");
       }
 
-      if (admins.includes(newAdminAddress)) {
+      if (!adminName || !email || !department || !organization || !phone || !IDNumber) {
+        throw new Error("All fields are required");
+      }
+
+      const adminExists = admins.some(admin => admin.address === newAdminAddress);
+      if (adminExists) {
         throw new Error("Admin already exists");
       }
 
       await addAdmin(newAdminAddress);
       
-      // Refresh the admins list
-      const updatedAdmins = await getAdmins();
-      setAdmins(updatedAdmins || []);
+      const newAdmin: AdminRecord = {
+        address: newAdminAddress,
+        name: adminName,
+        email: email,
+        organization: organization,
+        department: department,
+        phone: phone,
+        idNumber: IDNumber,
+        dateAdded: new Date().toLocaleDateString("en-GB")
+      };
+      setAdmins([...admins, newAdmin]);
       
       setSuccess("Admin added successfully!");
       setNewAdminAddress("");
+      setAdminName("");
+      setEmail("");
+      setDepartment("");
+      setOrganization("");
+      setPhone("");
+      setIDNumber("");
       setIsDialogOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add admin");
@@ -85,9 +132,7 @@ export function AdminManagement() {
     try {
       await removeAdmin(address);
       
-      // Refresh the admins list
-      const updatedAdmins = await getAdmins();
-      setAdmins(updatedAdmins || []);
+      setAdmins(admins.filter(admin => admin.address !== address));
       
       setSuccess("Admin removed successfully!");
     } catch (err) {
@@ -99,6 +144,28 @@ export function AdminManagement() {
 
   const formatAddress = (address: string) => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  };
+
+  const getInitials = (name: string) => {
+    if (!name) return "";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  };
+
+  const getDepartmentBadgeClass = (dept: string) => {
+    // simple color mapping for departments
+    if (!dept) return "";
+    if (/supply/i.test(dept)) return "bg-blue-50 text-blue-700";
+    if (/quality|qa/i.test(dept)) return "bg-amber-50 text-amber-700";
+    return "bg-muted/10 text-muted-foreground";
+  };
+
+  const getStatusBadgeClass = () => {
+    return "bg-green-100 text-green-800";
   };
 
   return (
@@ -134,36 +201,66 @@ export function AdminManagement() {
           <CardDescription>Total: {admins.length} admins</CardDescription>
         </CardHeader>
         <CardContent>
-          {admins.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No admins found</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Joined Date</TableHead>
+                  <TableHead>ID Number</TableHead>
+                  <TableHead>Wallet Address</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {admins.length === 0 ? (
                   <TableRow>
-                    <TableHead>Address</TableHead>
-                    <TableHead>Full Address</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      No admins found
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {admins.map((admin) => (
-                    <TableRow key={admin}>
+                ) : (
+                  admins.map((admin) => (
+                    <TableRow key={admin.address}>
                       <TableCell>
-                        <Badge variant="secondary">{formatAddress(admin)}</Badge>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs">{getInitials(admin.name)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium text-sm">{admin.name}</div>
+                            <div className="text-xs text-muted-foreground">{admin.email}</div>
+                          </div>
+                        </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{admin}</TableCell>
                       <TableCell>
-                        <Badge className="bg-green-100 text-green-800">Active</Badge>
+                        <Badge variant="outline" className={getDepartmentBadgeClass(admin.department)}>
+                          {admin.department}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{admin.organization}</TableCell>
+                      <TableCell className="text-sm">+91 {admin.phone}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusBadgeClass()}>
+                          Active
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{admin.dateAdded}</TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-muted px-2 py-1 rounded">{admin.idNumber}</code>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="font-mono text-xs">{formatAddress(admin.address)}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveAdmin(admin)}
+                          onClick={() => handleRemoveAdmin(admin.address)}
                           disabled={isLoading}
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
@@ -171,23 +268,96 @@ export function AdminManagement() {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-96 overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Admin</DialogTitle>
             <DialogDescription>
-              Enter the Ethereum address of the user to promote to admin
+              Enter the details of the user to promote to admin in the pharmaceutical supply chain
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="name" className="text-sm font-medium">
+                Admin Name
+              </label>
+              <Input
+                id="name"
+                placeholder="Dr. John Doe"
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="email" className="text-sm font-medium">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="john.doe@pharma.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="organization" className="text-sm font-medium">
+                Organization/Company Name
+              </label>
+              <Input
+                id="organization"
+                placeholder="Pharma Corp Ltd."
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="department" className="text-sm font-medium">
+                Department/Role
+              </label>
+              <Input
+                id="department"
+                placeholder="Supply Chain Director, Compliance Officer etc."
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="phone" className="text-sm font-medium">
+                Phone Number
+              </label>
+              <Input
+                id="phone"
+                placeholder="+91 0123456789"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="ID" className="text-sm font-medium">
+                ID Number
+              </label>
+              <Input
+                id="ID"
+                placeholder="PH-2026-00001"
+                value={IDNumber}
+                onChange={(e) => setIDNumber(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
             <div className="space-y-2">
               <label htmlFor="address" className="text-sm font-medium">
                 Wallet Address

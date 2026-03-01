@@ -18,10 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
-import { useState } from "react";
+import { Plus, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { useForm, SubmitHandler, Controller } from "react-hook-form";
+import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { BrowserProvider } from "ethers";
 
 type Inputs = {
   fullName: string;
@@ -35,6 +38,9 @@ type Inputs = {
 export function AddUserDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<"success" | "error" | null>(null);
 
   const {
     register,
@@ -44,15 +50,104 @@ export function AddUserDialog() {
     formState: { errors },
   } = useForm<Inputs>();
 
+  const {
+    addAdmin,
+    addManufacturer,
+    addDistributor,
+    addWholesaler,
+    getAdmins,
+    getManufacturers,
+    getDistributors,
+    getWholesalers
+  } = useSupplyChainContract();
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      setIsAdminUser(false);
+      if (!open) return;
+      try {
+        if (!window.ethereum) return;
+        const provider = new BrowserProvider(window.ethereum as any);
+        const signer = await provider.getSigner();
+        const addr = await signer.getAddress();
+
+        const admins = await getAdmins();
+        if (admins && Array.isArray(admins)) {
+          const normalized = admins.map((a: string) => a.toLowerCase());
+          setIsAdminUser(normalized.includes(addr.toLowerCase()));
+        }
+      } catch (err) {
+        // silent
+      }
+    };
+    checkAdmin();
+  }, [open, getAdmins]);
+
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
+    setMessage(null);
+    setMessageType(null);
     try {
       setLoading(true);
 
+      if (!isAdminUser) {
+        throw new Error("Only admin users can add new users on-chain/off-chain");
+      }
+
+      // Off-chain check: check email address
+      const checkRes = await axios.get(`/api/user?email=${encodeURIComponent(data.email)}&walletId=${encodeURIComponent(data.walletId)}`);
+      if (checkRes.data.exists) {
+        if (checkRes.data.reason === "email") {
+          throw new Error("Off-chain check failed: User already exist with this email address");
+        } else {
+          throw new Error("Off-chain check failed: User already exist with this wallet address");
+        }
+      }
+
+      // On-chain check: check wallet address
+      const role = data.role;
+      const normalizedWallet = data.walletId.toLowerCase();
+      let onChainExists = false;
+
+      if (role === "admin") {
+        const admins = await getAdmins();
+        if (admins && admins.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      } else if (role === "manufacturer") {
+        const manufacturers = await getManufacturers();
+        if (manufacturers && manufacturers.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      } else if (role === "distributor") {
+        const distributors = await getDistributors();
+        if (distributors && distributors.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      } else if (role === "wholesaler") {
+        const wholesalers = await getWholesalers();
+        if (wholesalers && wholesalers.some((a: string) => a.toLowerCase() === normalizedWallet)) onChainExists = true;
+      }
+
+      if (onChainExists) {
+        throw new Error("On-chain check failed: User already exist with this wallet address and role");
+      }
+
+      // call on-chain role function if available
+      if (role === "admin") {
+        await addAdmin(data.walletId);
+      } else if (role === "manufacturer") {
+        await addManufacturer(data.walletId);
+      } else if (role === "distributor") {
+        await addDistributor(data.walletId);
+      } else if (role === "wholesaler") {
+        await addWholesaler(data.walletId);
+      } // other roles: save only off-chain
+
+      // persist off-chain
       await axios.post("/api/user", data);
 
+      setMessage("User added successfully");
+      setMessageType("success");
       reset();
       setOpen(false);
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.message || "Failed to add user";
+      setMessage(msg);
+      setMessageType("error");
       console.error("Error adding user:", error);
     } finally {
       setLoading(false);
@@ -76,7 +171,19 @@ export function AddUserDialog() {
           </DialogDescription>
         </DialogHeader>
 
+        {message && (
+          <div className="mb-4">
+            <Alert variant={messageType === "error" ? "destructive" : undefined}>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {!isAdminUser && (
+            <div className="text-sm text-red-600">Only connected admin wallets can add users.</div>
+          )}
           {/* Full Name */}
           <div className="space-y-2">
             <Label>Full Name</Label>
@@ -121,6 +228,8 @@ export function AddUserDialog() {
               )}
             />
           </div>
+
+
 
           <div className="space-y-2">
             <Label>Company/Organization</Label>

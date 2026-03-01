@@ -15,6 +15,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AnimatedThemeToggler } from "@/components/ui/theme-toggle";
+import WalletButton from "@/components/common/WalletButton";
 
 export default function RootLayout({
   children,
@@ -36,7 +37,10 @@ export default function RootLayout({
                 />
                 <div className="flex justify-between gap-3 items-center w-full">
                   <DynamicBreadcrumb />
-                  <AnimatedThemeToggler />
+                  <div className="flex items-center gap-3">
+                    <WalletButton />
+                    <AnimatedThemeToggler />
+                  </div>
                 </div>
               </div>
             </header>
