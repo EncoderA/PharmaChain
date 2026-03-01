@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Filter,
@@ -44,89 +44,64 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
+import { useUser } from "@/contexts/user-context";
 
-export interface Product {    
-  id: string;
+interface Product {
+  id: number;
+  productCode: string;
   name: string;
-  manufacturer: string;
-  batch: string;
+  category: string | null;
+  batch: string | null;
   stock: number;
   status: "Verified" | "Pending" | "Expired";
-  timestamp: string;
-  hash: string;
-  expiryDate: string;
-  category: string;
+  manufacturerId: number | null;
+  currentOwnerId: number | null;
+  manufacturingDate: string | null;
+  expiryDate: string | null;
+  blockchainHash: string | null;
+  createdAt: string;
+  updatedAt: string;
+  manufacturerName: string | null;
 }
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const router = useRouter();
+  const { user } = useUser();
 
-  const products: Product[] = [
-    {
-      id: "PRD-001",
-      name: "Paracetamol 500mg",
-      manufacturer: "PharmaChain Labs",
-      batch: "BATCH-A123",
-      stock: 120,
-      status: "Verified",
-      timestamp: "2025-10-25 10:45 AM",
-      hash: "0x9f2a86d4c8b3e1a7f5d2e8c4b7a9e3d1f6c8a2b4",
-      expiryDate: "2026-10-25",
-      category: "Analgesic",
-    },
-    {
-      id: "PRD-002",
-      name: "Amoxicillin 250mg",
-      manufacturer: "WellCure Pharma",
-      batch: "BATCH-B298",
-      stock: 80,
-      status: "Verified",
-      timestamp: "2025-10-23 02:12 PM",
-      hash: "0x8a3d7f2e1c9b6a4d8e5f3a2b1c7d9e4f6a8b3c1",
-      expiryDate: "2026-08-15",
-      category: "Antibiotic",
-    },
-    {
-      id: "PRD-003",
-      name: "Vitamin C 1000mg",
-      manufacturer: "NutraHealth Inc",
-      batch: "BATCH-C456",
-      stock: 200,
-      status: "Pending",
-      timestamp: "2025-10-26 09:30 AM",
-      hash: "0x7b4c9e2a8d6f1c3a5b9e7d2f4a8c6b3e1d5f9a2",
-      expiryDate: "2027-01-20",
-      category: "Supplement",
-    },
-    {
-      id: "PRD-004",
-      name: "Ibuprofen 400mg",
-      manufacturer: "MediCare Solutions",
-      batch: "BATCH-D789",
-      stock: 45,
-      status: "Expired",
-      timestamp: "2025-09-15 03:45 PM",
-      hash: "0x6c3a8d2f9e1b7a4c6d8f2e5a9b3c7e1d4f8a2b6",
-      expiryDate: "2025-09-10",
-      category: "Anti-inflammatory",
-    },
-  ];
+  const fetchProducts = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (searchTerm) params.set("search", searchTerm);
 
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.manufacturer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.batch.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.id.toLowerCase().includes(searchTerm.toLowerCase());
+      const res = await fetch(`/api/products?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProducts(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, searchTerm]);
 
-    const matchesStatus =
-      statusFilter === "all" || product.status === statusFilter;
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      fetchProducts();
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [fetchProducts]);
 
-    return matchesSearch && matchesStatus;
-  });
+  const filteredProducts = products;
 
   const getStatusBadge = (status: Product["status"]) => {
     const statusConfig = {
@@ -159,8 +134,76 @@ export default function ProductsPage() {
   };
 
   const handleExportData = () => {
-    console.log("Exporting products data...");
+    const csvRows = [
+      ["Product Code", "Name", "Manufacturer", "Batch", "Stock", "Status", "Category", "Expiry Date"].join(","),
+      ...products.map((p) =>
+        [
+          p.productCode,
+          p.name,
+          p.manufacturerName ?? "",
+          p.batch ?? "",
+          p.stock,
+          p.status,
+          p.category ?? "",
+          p.expiryDate ? new Date(p.expiryDate).toLocaleDateString() : "",
+        ].join(",")
+      ),
+    ];
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "products.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
+
+  const handleAddProduct = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setAddError(null);
+    setAddLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    const body = {
+      name: formData.get("name") as string,
+      productCode: formData.get("productCode") as string,
+      batch: formData.get("batch") as string,
+      category: formData.get("category") as string,
+      stock: parseInt(formData.get("stock") as string) || 0,
+      expiryDate: formData.get("expiryDate") as string || undefined,
+    };
+
+    try {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create product");
+      }
+
+      setAddDialogOpen(false);
+      fetchProducts();
+    } catch (err: any) {
+      setAddError(err.message);
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "N/A";
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const canAddProducts = user?.role === "manufacturer" || user?.role === "admin";
 
   return (
     <div className="flex-1 p-6 bg-background text-foreground space-y-6">
@@ -178,39 +221,63 @@ export default function ProductsPage() {
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button className="flex items-center gap-2 rounded-lg">
-                <Plus />
-                Add Product
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Add New Product</DialogTitle>
-                <DialogDescription>
-                  Fill in the details of the new product.
-                </DialogDescription>
-              </DialogHeader>
-              <form className="space-y-4 mt-4">
-                <div>
-                  <Label className="mb-1 block">Product Name</Label>
-                  <Input placeholder="Enter product name" />
-                </div>
-                <div>
-                  <Label className="mb-1 block">Batch Number</Label>
-                  <Input placeholder="Enter batch number" />
-                </div>
-                <div>
-                  <Label className="mb-1 block">Manufacturer</Label>
-                  <Input placeholder="Enter manufacturer name" />
-                </div>
-                <div className="flex justify-end">
-                  <Button type="submit">Save Product</Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          {canAddProducts && (
+            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="flex items-center gap-2 rounded-lg">
+                  <Plus />
+                  Add Product
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add New Product</DialogTitle>
+                  <DialogDescription>
+                    Fill in the details of the new product.
+                  </DialogDescription>
+                </DialogHeader>
+                {addError && (
+                  <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
+                    {addError}
+                  </div>
+                )}
+                <form onSubmit={handleAddProduct} className="space-y-4 mt-4">
+                  <div>
+                    <Label className="mb-1 block">Product Code</Label>
+                    <Input name="productCode" placeholder="e.g. PRD-005" required />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block">Product Name</Label>
+                    <Input name="name" placeholder="Enter product name" required />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block">Category</Label>
+                    <Input name="category" placeholder="e.g. Analgesic" />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block">Batch Number</Label>
+                    <Input name="batch" placeholder="e.g. BATCH-A123" />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block">Stock</Label>
+                    <Input name="stock" type="number" placeholder="0" defaultValue={0} />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block">Expiry Date</Label>
+                    <Input name="expiryDate" type="date" />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)} disabled={addLoading}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={addLoading}>
+                      {addLoading ? "Saving..." : "Save Product"}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -223,7 +290,9 @@ export default function ProductsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{products.length}</div>
+            <div className="text-2xl font-bold">
+              {loading ? "..." : products.length}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -232,7 +301,7 @@ export default function ProductsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {products.filter((p) => p.status === "Verified").length}
+              {loading ? "..." : products.filter((p) => p.status === "Verified").length}
             </div>
           </CardContent>
         </Card>
@@ -242,7 +311,7 @@ export default function ProductsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">
-              {products.filter((p) => p.status === "Pending").length}
+              {loading ? "..." : products.filter((p) => p.status === "Pending").length}
             </div>
           </CardContent>
         </Card>
@@ -252,7 +321,7 @@ export default function ProductsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {products.filter((p) => p.stock < 50).length}
+              {loading ? "..." : products.filter((p) => p.stock < 50).length}
             </div>
           </CardContent>
         </Card>
@@ -332,71 +401,81 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product) => {
-                  const stockStatus = getStockStatus(product.stock);
-                  return (
-                    <tr
-                      key={product.id}
-                      className="border-b border-border cursor-pointer hover:bg-muted/20"
-                      onClick={() => router.push(`/products/${product.id}`)}
-                    >
-                      <td className="px-4 py-3">
-                        <div>
-                          <div className="font-medium">{product.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {product.id}
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                      Loading products...
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((product) => {
+                    const stockStatus = getStockStatus(product.stock);
+                    return (
+                      <tr
+                        key={product.id}
+                        className="border-b border-border cursor-pointer hover:bg-muted/20"
+                        onClick={() => router.push(`/products/${product.id}`)}
+                      >
+                        <td className="px-4 py-3">
+                          <div>
+                            <div className="font-medium">{product.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {product.productCode}
+                            </div>
+                            {product.category && (
+                              <div className="text-xs text-primary">
+                                {product.category}
+                              </div>
+                            )}
                           </div>
-                          <div className="text-xs text-primary">
-                            {product.category}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {product.manufacturerName ?? "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-mono">
+                          {product.batch ?? "N/A"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-sm">{product.stock} units</span>
+                            <span className={`text-xs ${stockStatus.className}`}>
+                              {stockStatus.label}
+                            </span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        {product.manufacturer}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-mono">
-                        {product.batch}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col">
-                          <span className="text-sm">{product.stock} units</span>
-                          <span className={`text-xs ${stockStatus.className}`}>
-                            {stockStatus.label}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {getStatusBadge(product.status)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {product.timestamp}
-                      </td>
-                      <td className="px-4 py-3">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => handleViewDetails(product,e)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>View Details</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-4 py-3">
+                          {getStatusBadge(product.status)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {formatDate(product.updatedAt)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => handleViewDetails(product, e)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>View Details</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
 
-          {filteredProducts.length === 0 && (
+          {!loading && filteredProducts.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               No products found matching your criteria
             </div>
@@ -418,9 +497,9 @@ export default function ProductsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
-                    Product ID
+                    Product Code
                   </label>
-                  <p className="text-sm">{selectedProduct.id}</p>
+                  <p className="text-sm">{selectedProduct.productCode}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
@@ -432,13 +511,13 @@ export default function ProductsPage() {
                   <label className="text-sm font-medium text-muted-foreground">
                     Manufacturer
                   </label>
-                  <p className="text-sm">{selectedProduct.manufacturer}</p>
+                  <p className="text-sm">{selectedProduct.manufacturerName ?? "N/A"}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
                     Batch
                   </label>
-                  <p className="text-sm font-mono">{selectedProduct.batch}</p>
+                  <p className="text-sm font-mono">{selectedProduct.batch ?? "N/A"}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
@@ -450,13 +529,13 @@ export default function ProductsPage() {
                   <label className="text-sm font-medium text-muted-foreground">
                     Expiry Date
                   </label>
-                  <p className="text-sm">{selectedProduct.expiryDate}</p>
+                  <p className="text-sm">{formatDate(selectedProduct.expiryDate)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
                     Category
                   </label>
-                  <p className="text-sm">{selectedProduct.category}</p>
+                  <p className="text-sm">{selectedProduct.category ?? "N/A"}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">
@@ -467,19 +546,21 @@ export default function ProductsPage() {
                   </div>
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Blockchain Hash
-                </label>
-                <p className="text-sm font-mono bg-muted p-2 rounded break-all">
-                  {selectedProduct.hash}
-                </p>
-              </div>
+              {selectedProduct.blockchainHash && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Blockchain Hash
+                  </label>
+                  <p className="text-sm font-mono bg-muted p-2 rounded break-all">
+                    {selectedProduct.blockchainHash}
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="text-sm font-medium text-muted-foreground">
                   Last Updated
                 </label>
-                <p className="text-sm">{selectedProduct.timestamp}</p>
+                <p className="text-sm">{formatDate(selectedProduct.updatedAt)}</p>
               </div>
               <div className="flex justify-end gap-2 pt-4">
                 <Button
@@ -488,7 +569,9 @@ export default function ProductsPage() {
                 >
                   Close
                 </Button>
-                <Button>Verify on Blockchain</Button>
+                <Button onClick={() => router.push(`/products/${selectedProduct.id}`)}>
+                  Full Details
+                </Button>
               </div>
             </div>
           )}

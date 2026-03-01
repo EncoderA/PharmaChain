@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,42 +15,94 @@ import { Button } from "@/components/ui/button";
 import { CheckIcon, PlusIcon, QrCode, ShoppingCart, Verified, WarehouseIcon } from "lucide-react";
 import Calendar27 from "./BarChart";
 
+interface DashboardStats {
+  products: {
+    total: number;
+    verified: number;
+    pending: number;
+    expired: number;
+    lowStock: number;
+  };
+  transactions: {
+    total: number;
+    confirmed: number;
+    pending: number;
+    failed: number;
+  };
+  users: {
+    total: number;
+    manufacturers: number;
+    distributors: number;
+    pharmacists: number;
+    admins: number;
+  };
+}
+
 export default function SupplyChainDashboard() {
-  const stats = [
-    { label: "Total Products", value: "1,250", change: "+12%" },
-    { label: "Transactions Processed", value: "5,800", change: "+8%" },
-    { label: "Active Supply Chains", value: "15", change: "+5%" },
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const res = await fetch("/api/dashboard/stats");
+        if (res.ok) {
+          const data = await res.json();
+          setStats(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch dashboard stats:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStats();
+  }, []);
+
+  const statCards = [
+    {
+      label: "Total Products",
+      value: stats?.products.total ?? 0,
+    },
+    {
+      label: "Transactions Processed",
+      value: stats?.transactions.total ?? 0,
+    },
+    {
+      label: "Active Users",
+      value: stats?.users.total ?? 0,
+    },
   ];
 
   const activities = [
     {
       icon: <PlusIcon />,
       title: "Product Added",
-      detail: "Product ID: 12345",
+      detail: `${stats?.products.pending ?? 0} pending verification`,
       color: "bg-primary/20 text-primary",
     },
     {
-      icon: <ShoppingCart />, 
-      title: "Shipped from Warehouse",
-      detail: "Tracking ID: ABCDE",
+      icon: <ShoppingCart />,
+      title: "Products Verified",
+      detail: `${stats?.products.verified ?? 0} verified products`,
       color: "bg-primary/20 text-primary",
     },
     {
       icon: <WarehouseIcon />,
-      title: "Received at Dist. Center",
-      detail: "Received at 10:00 AM",
+      title: "Transactions Confirmed",
+      detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
       color: "bg-primary/20 text-primary",
     },
     {
       icon: <CheckIcon />,
-      title: "Quality Check Passed",
-      detail: "Passed at 2:00 PM",
+      title: "Low Stock Alerts",
+      detail: `${stats?.products.lowStock ?? 0} products with low stock`,
       color: "bg-primary/20 text-primary",
     },
     {
       icon: <CheckIcon />,
-      title: "Delivered to Retailer",
-      detail: "Delivered at 5:00 PM",
+      title: "Expired Products",
+      detail: `${stats?.products.expired ?? 0} expired`,
       color: "bg-primary/20 text-primary",
       isLast: true,
     },
@@ -104,7 +157,7 @@ export default function SupplyChainDashboard() {
               <DialogHeader>
                 <DialogTitle>Verify Product Authenticity</DialogTitle>
                 <DialogDescription>
-                  Enter the product’s unique ID or scan its QR code to verify.
+                  Enter the product's unique ID or scan its QR code to verify.
                 </DialogDescription>
               </DialogHeader>
               <form className="space-y-5 mt-5">
@@ -121,7 +174,7 @@ export default function SupplyChainDashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {stats.map((stat, index) => (
+          {statCards.map((stat, index) => (
             <div
               key={index}
               className="bg-card p-6 rounded-xl border border-border"
@@ -130,10 +183,7 @@ export default function SupplyChainDashboard() {
                 {stat.label}
               </p>
               <p className="text-3xl font-bold text-foreground mt-1">
-                {stat.value}
-              </p>
-              <p className="text-sm font-medium text-green-500 mt-1">
-                {stat.change}
+                {loading ? "..." : stat.value.toLocaleString()}
               </p>
             </div>
           ))}
@@ -146,7 +196,7 @@ export default function SupplyChainDashboard() {
 
           <div className="bg-card p-6 rounded-xl shadow-sm border border-border">
             <h3 className="text-lg font-semibold text-foreground mb-4">
-              Supply Chain Activity
+              Supply Chain Overview
             </h3>
             <div className="space-y-4">
               {activities.map((activity, index) => (

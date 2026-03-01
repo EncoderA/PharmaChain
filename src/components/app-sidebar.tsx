@@ -25,56 +25,62 @@ import {
 } from "@/components/ui/sidebar"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { useUser } from "@/contexts/user-context"
 
-// ✅ Keep static data OUTSIDE the component to avoid re-render mismatches
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+const navItems = [
+  {
+    title: "Dashboard",
+    name: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      name: "Dashboard",
-      url: "/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      title: "Products",
-      name: "Products",
-      url: "/products",
-      icon: PieChart,
-    },
-    {
-      title: "Transactions",
-      name: "Transactions",
-      url: "/transactions",
-      icon: Receipt,
-    },
-    {
-      title: "Reports",
-      name: "Reports",
-      url: "/reports",
-      icon: Map,
-    },
-    {
-      title: "User Management",
-      name: "User Management",
-      url: "/users",
-      icon: User,
-    },
-  ],
-};
+  {
+    title: "Products",
+    name: "Products",
+    url: "/products",
+    icon: PieChart,
+  },
+  {
+    title: "Transactions",
+    name: "Transactions",
+    url: "/transactions",
+    icon: Receipt,
+  },
+  {
+    title: "Reports",
+    name: "Reports",
+    url: "/reports",
+    icon: Map,
+  },
+  {
+    title: "User Management",
+    name: "User Management",
+    url: "/users",
+    icon: User,
+  },
+];
+
+function formatRole(role: string): string {
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const { user } = useUser()
 
-  const navMainWithActive = data.navMain.map((item) => ({
-    ...item, 
+  const navMainWithActive = navItems.map((item) => ({
+    ...item,
     isActive: pathname.startsWith(item.url),
   }))
-  console.log("Current Pathname:", pathname, navMainWithActive)
+
+  const userData = {
+    name: user?.fullName ?? "Loading...",
+    email: user?.email ?? "",
+    avatar: "/avatars/shadcn.jpg",
+  }
+
+  const roleLabel = user?.role ? formatRole(user.role) : "User"
+
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
       {/* --- HEADER / LOGO --- */}
@@ -82,7 +88,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              {/* ✅ Use Link (not <a href="#">) to avoid hydration issues */}
               <Link href="/dashboard" className="flex items-center gap-3">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Image
@@ -94,7 +99,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </div>
                 <div className="grid flex-1 text-foreground text-left text-sm leading-tight">
                   <span className="truncate font-medium">PharmaChain</span>
-                  <span className="truncate text-xs">Manufacturer</span>
+                  <span className="truncate text-xs">{roleLabel}</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -109,7 +114,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       {/* --- USER FOOTER --- */}
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={userData} />
       </SidebarFooter>
     </Sidebar>
   );

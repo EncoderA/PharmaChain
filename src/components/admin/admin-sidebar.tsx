@@ -24,56 +24,56 @@ import {
 } from "@/components/ui/sidebar"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
+import { useUser } from "@/contexts/user-context"
 
-// ✅ Keep static data OUTSIDE the component to avoid re-render mismatches
-const data = {
-  user: {
-    name: "Admin User",
-    email: "admin@pharmachain.com",
-    avatar: "/avatars/shadcn.jpg",
+const navItems = [
+  {
+    title: "Dashboard",
+    name: "Dashboard",
+    url: "/admin",
+    icon: BarChart3,
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      name: "Dashboard",
-      url: "/admin",
-      icon: BarChart3,
-    },
-    {
-      title: "Admins",
-      name: "Admins",
-      url: "/admin/admins",
-      icon: Shield,
-    },
-    {
-      title: "Manufacturers",
-      name: "Manufacturers",
-      url: "/admin/manufacturers",
-      icon: Factory,
-    },
-    {
-      title: "Distributors",
-      name: "Distributors",
-      url: "/admin/distributors",
-      icon: Truck,
-    },
-    {
-      title: "Wholesalers",
-      name: "Wholesalers",
-      url: "/admin/wholesalers",
-      icon: Package,
-    },
-  ],
-};
+  {
+    title: "Admins",
+    name: "Admins",
+    url: "/admin/admins",
+    icon: Shield,
+  },
+  {
+    title: "Manufacturers",
+    name: "Manufacturers",
+    url: "/admin/manufacturers",
+    icon: Factory,
+  },
+  {
+    title: "Distributors",
+    name: "Distributors",
+    url: "/admin/distributors",
+    icon: Truck,
+  },
+  {
+    title: "Wholesalers",
+    name: "Wholesalers",
+    url: "/admin/wholesalers",
+    icon: Package,
+  },
+];
 
 export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const { user } = useUser()
 
-  const navMainWithActive = data.navMain.map((item) => ({
-    ...item, 
+  const navMainWithActive = navItems.map((item) => ({
+    ...item,
     isActive: pathname.startsWith(item.url),
   }))
-  console.log("Current Pathname:", pathname, navMainWithActive)
+
+  const userData = {
+    name: user?.fullName ?? "Admin",
+    email: user?.email ?? "",
+    avatar: "/avatars/shadcn.jpg",
+  }
+
   return (
     <Sidebar variant="inset" collapsible="icon" {...props}>
       {/* --- HEADER / LOGO --- */}
@@ -81,7 +81,6 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              {/* ✅ Use Link (not <a href="#">) to avoid hydration issues */}
               <Link href="/admin" className="flex items-center gap-3">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Image
@@ -108,7 +107,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
 
       {/* --- USER FOOTER --- */}
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={userData} />
       </SidebarFooter>
     </Sidebar>
   );

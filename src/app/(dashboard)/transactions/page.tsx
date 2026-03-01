@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Filter,
   Download,
-  Eye,
   Copy,
   CheckCircle,
   Clock,
@@ -34,103 +33,64 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { ViewTransactionButton } from "@/components/products/view-transaction-button";
 
 interface Transaction {
-  txId: string;
-  productId: string;
-  batch: string;
+  id: number;
+  productId: number | null;
   action: string;
-  from: string;
-  to: string;
-  timestamp: string;
+  fromUserId: number | null;
+  toUserId: number | null;
+  txHash: string | null;
+  blockNumber: number | null;
   status: "Confirmed" | "Pending" | "Failed";
-  block: number;
-  gasUsed: number;
-  value: string;
+  createdAt: string;
+  productName: string | null;
+  productCode: string | null;
+  fromUserName: string | null;
+  toUserName: string | null;
 }
 
 export default function TransactionsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
   const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
 
-  const transactions: Transaction[] = [
-    {
-      txId: "0x9a4d8f3c7b2e1a6d9f8c7b6a5e4d3f2c1b8a7e6d5f4c3b2a1f7b2",
-      productId: "PRD-001",
-      batch: "BATCH-A123",
-      action: "Manufactured",
-      from: "PharmaChain Labs",
-      to: "Distributor Hub",
-      timestamp: "2025-10-24 10:42 AM",
-      status: "Confirmed",
-      block: 108942,
-      gasUsed: 21000,
-      value: "0 ETH",
-    },
-    {
-      txId: "0x7f2c9e8d1b6a3c4f5e8d7c6b9a2f1e4d3c8b7a6e5f4d3c2b1a9b61",
-      productId: "PRD-001",
-      batch: "BATCH-A123",
-      action: "Quality Verified",
-      from: "Distributor Hub",
-      to: "HealthMart Pharmacy",
-      timestamp: "2025-10-25 02:16 PM",
-      status: "Confirmed",
-      block: 108977,
-      gasUsed: 35000,
-      value: "0 ETH",
-    },
-    {
-      txId: "0x1e8a7d9c6b5a4f3e2d1c8b9a7e6d5f4c3b2a1e8d7c6b5a4f3e2d1ac42",
-      productId: "PRD-002",
-      batch: "BATCH-B298",
-      action: "Shipment Received",
-      from: "HealthMart Pharmacy",
-      to: "End Consumer",
-      timestamp: "2025-10-26 09:05 AM",
-      status: "Pending",
-      block: 109005,
-      gasUsed: 28000,
-      value: "0 ETH",
-    },
-    {
-      txId: "0x3d2c1b8a9e7f6d5c4b3a2e1d8c7b6a5f4e3d2c1b8a9e7f6d5c4b3a2e1d",
-      productId: "PRD-003",
-      batch: "BATCH-C456",
-      action: "Batch Created",
-      from: "PharmaChain Labs",
-      to: "Quality Control",
-      timestamp: "2025-10-27 11:20 AM",
-      status: "Failed",
-      block: 109042,
-      gasUsed: 0,
-      value: "0 ETH",
-    },
-  ];
+  const fetchTransactions = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.set("status", statusFilter);
 
+      const res = await fetch(`/api/transactions?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTransactions(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch transactions:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  // Client-side search filtering
   const filteredTransactions = transactions.filter((tx) => {
-    const matchesSearch =
-      tx.txId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.productId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.batch.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.from.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.to.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === "all" || tx.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (tx.txHash?.toLowerCase().includes(term)) ||
+      (tx.productCode?.toLowerCase().includes(term)) ||
+      (tx.productName?.toLowerCase().includes(term)) ||
+      (tx.action.toLowerCase().includes(term)) ||
+      (tx.fromUserName?.toLowerCase().includes(term)) ||
+      (tx.toUserName?.toLowerCase().includes(term))
+    );
   });
 
   const getStatusConfig = (status: Transaction["status"]) => {
@@ -160,9 +120,39 @@ export default function TransactionsPage() {
     return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
   };
 
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const handleExportData = () => {
-    // In a real app, this would generate a CSV file
-    console.log("Exporting transactions data...");
+    const csvRows = [
+      ["Tx Hash", "Product", "Action", "From", "To", "Block", "Status", "Timestamp"].join(","),
+      ...transactions.map((tx) =>
+        [
+          tx.txHash ?? "",
+          tx.productCode ?? "",
+          tx.action,
+          tx.fromUserName ?? "",
+          tx.toUserName ?? "",
+          tx.blockNumber ?? "",
+          tx.status,
+          formatDate(tx.createdAt),
+        ].join(",")
+      ),
+    ];
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "transactions.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -191,7 +181,9 @@ export default function TransactionsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{transactions.length}</div>
+            <div className="text-2xl font-bold">
+              {loading ? "..." : transactions.length}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -200,7 +192,7 @@ export default function TransactionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {transactions.filter((tx) => tx.status === "Confirmed").length}
+              {loading ? "..." : transactions.filter((tx) => tx.status === "Confirmed").length}
             </div>
           </CardContent>
         </Card>
@@ -210,7 +202,17 @@ export default function TransactionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">
-              {transactions.filter((tx) => tx.status === "Pending").length}
+              {loading ? "..." : transactions.filter((tx) => tx.status === "Pending").length}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Failed</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {loading ? "..." : transactions.filter((tx) => tx.status === "Failed").length}
             </div>
           </CardContent>
         </Card>
@@ -292,102 +294,121 @@ export default function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.map((tx) => {
-                  const statusConfig = getStatusConfig(tx.status);
-                  const Icon = statusConfig.icon;
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="text-center py-8 text-muted-foreground">
+                      Loading transactions...
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.map((tx) => {
+                    const statusConfig = getStatusConfig(tx.status);
+                    const Icon = statusConfig.icon;
 
-                  return (
-                    <tr
-                      key={tx.txId}
-                      className="border-b border-border hover:bg-muted/20 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0 hover:bg-muted"
-                                  onClick={() =>
-                                    copyToClipboard(tx.txId, tx.txId)
-                                  }
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>
-                                  {copiedTxId === tx.txId
-                                    ? "Copied!"
-                                    : "Copy Tx Hash"}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <span className="font-mono text-sm text-primary">
-                            {formatTxHash(tx.txId)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <div className="text-sm font-medium">
-                            {tx.productId}
+                    return (
+                      <tr
+                        key={tx.id}
+                        className="border-b border-border hover:bg-muted/20 transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {tx.txHash && (
+                              <>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 hover:bg-muted"
+                                        onClick={() =>
+                                          copyToClipboard(tx.txHash!, String(tx.id))
+                                        }
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>
+                                        {copiedTxId === String(tx.id)
+                                          ? "Copied!"
+                                          : "Copy Tx Hash"}
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <span className="font-mono text-sm text-primary">
+                                  {formatTxHash(tx.txHash)}
+                                </span>
+                              </>
+                            )}
+                            {!tx.txHash && (
+                              <span className="text-sm text-muted-foreground">N/A</span>
+                            )}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {tx.batch}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div>
+                            <div className="text-sm font-medium">
+                              {tx.productCode ?? "N/A"}
+                            </div>
+                            {tx.productName && (
+                              <div className="text-xs text-muted-foreground">
+                                {tx.productName}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm">{tx.action}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-muted-foreground truncate max-w-[100px]">
-                            {tx.from}
-                          </span>
-                          <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-muted-foreground truncate max-w-[100px]">
-                            {tx.to}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-mono">
-                        {tx.block.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {tx.timestamp}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge
-                          variant={statusConfig.variant}
-                          className="flex items-center gap-1 w-fit"
-                        >
-                          <Icon className="h-3 w-3" />
-                          {statusConfig.label}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <ViewTransactionButton txHash={tx.txId} />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>View Details</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-4 py-3 text-sm">{tx.action}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground truncate max-w-[100px]">
+                              {tx.fromUserName ?? "N/A"}
+                            </span>
+                            <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-muted-foreground truncate max-w-[100px]">
+                              {tx.toUserName ?? "N/A"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-mono">
+                          {tx.blockNumber?.toLocaleString() ?? "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {formatDate(tx.createdAt)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge
+                            variant={statusConfig.variant}
+                            className="flex items-center gap-1 w-fit"
+                          >
+                            <Icon className="h-3 w-3" />
+                            {statusConfig.label}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {tx.txHash && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <ViewTransactionButton txHash={tx.txHash} />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>View Details</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
 
-          {filteredTransactions.length === 0 && (
+          {!loading && filteredTransactions.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               No transactions found matching your criteria
             </div>

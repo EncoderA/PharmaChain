@@ -15,6 +15,13 @@
       "when": 1772091528875,
       "tag": "0001_fine_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772388738694,
+      "tag": "0002_known_thundra",
+      "breakpoints": true
     }
   ]
 }

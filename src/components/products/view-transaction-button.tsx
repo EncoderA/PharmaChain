@@ -12,7 +12,7 @@ export function ViewTransactionButton({ txHash }: ViewTransactionButtonProps) {
   const router = useRouter();
 
   const handleViewTransaction = () => {
-    router.push(`/transactions/${txHash}`);
+    router.push(`/transactions/${encodeURIComponent(txHash)}`);
   };
 
   return (

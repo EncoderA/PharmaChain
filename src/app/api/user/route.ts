@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
 import { usersTable } from "@/db/schema";
-import { ca } from "date-fns/locale";
 import { eq } from "drizzle-orm";
+import { hashPassword } from "@/lib/auth";
 
 export async function GET(req: Request) {
   try {
@@ -11,21 +11,53 @@ export async function GET(req: Request) {
     const walletId = searchParams.get("walletId");
 
     if (email) {
-      const users = await db.select().from(usersTable).where(eq(usersTable.email, email));
+      const users = await db
+        .select({
+          id: usersTable.id,
+          fullName: usersTable.fullName,
+          organization: usersTable.organization,
+          email: usersTable.email,
+          phone: usersTable.phone,
+          role: usersTable.role,
+          walletId: usersTable.walletId,
+        })
+        .from(usersTable)
+        .where(eq(usersTable.email, email));
       if (users.length > 0) {
-        return NextResponse.json({ exists: true, reason: "email" });
+        return NextResponse.json({ exists: true, reason: "email", user: users[0] });
       }
     }
 
     if (walletId) {
-      const users = await db.select().from(usersTable).where(eq(usersTable.walletId, walletId));
+      const users = await db
+        .select({
+          id: usersTable.id,
+          fullName: usersTable.fullName,
+          organization: usersTable.organization,
+          email: usersTable.email,
+          phone: usersTable.phone,
+          role: usersTable.role,
+          walletId: usersTable.walletId,
+        })
+        .from(usersTable)
+        .where(eq(usersTable.walletId, walletId));
       if (users.length > 0) {
-        return NextResponse.json({ exists: true, reason: "wallet" });
+        return NextResponse.json({ exists: true, reason: "wallet", user: users[0] });
       }
     }
 
     if (!email && !walletId) {
-      const allUsers = await db.select().from(usersTable);
+      const allUsers = await db
+        .select({
+          id: usersTable.id,
+          fullName: usersTable.fullName,
+          organization: usersTable.organization,
+          email: usersTable.email,
+          phone: usersTable.phone,
+          role: usersTable.role,
+          walletId: usersTable.walletId,
+        })
+        .from(usersTable);
       return NextResponse.json(allUsers);
     }
 
@@ -65,7 +97,10 @@ export async function POST(req: Request) {
         .where(eq(usersTable.walletId, body.walletId));
 
       if (existingByWallet && existingByWallet.length > 0) {
-        return NextResponse.json({ error: "User with this wallet already exists" }, { status: 409 });
+        return NextResponse.json(
+          { error: "User with this wallet already exists" },
+          { status: 409 },
+        );
       }
 
       const existingByEmail = await db
@@ -74,11 +109,19 @@ export async function POST(req: Request) {
         .where(eq(usersTable.email, body.email));
 
       if (existingByEmail && existingByEmail.length > 0) {
-        return NextResponse.json({ error: "User with this email already exists" }, { status: 409 });
+        return NextResponse.json(
+          { error: "User with this email already exists" },
+          { status: 409 },
+        );
       }
     } catch (dbErr) {
       console.error("Error checking existing user:", dbErr);
-      // continue to insertion attempt which will surface errors
+    }
+
+    // Hash password if provided
+    let hashedPassword: string | null = null;
+    if (body.password) {
+      hashedPassword = await hashPassword(body.password);
     }
 
     await db.insert(usersTable).values({
@@ -88,6 +131,7 @@ export async function POST(req: Request) {
       phone: body.phone,
       role: body.role,
       walletId: body.walletId,
+      password: hashedPassword,
     });
 
     return NextResponse.json({ success: true });
