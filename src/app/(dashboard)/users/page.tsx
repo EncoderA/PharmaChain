@@ -19,6 +19,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import axios from "axios";
 
 interface User {
   id: number;
@@ -41,25 +42,21 @@ const UsersPage = () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch("/api/user", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.error || `Failed to fetch users (${response.status})`,
-          );
-        }
-
-        const data = await response.json();
+        const { data } = await axios.get<User[]>("/api/user");
         setUsers(data);
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to fetch users";
+        // Axios errors include message and response info
+        let errorMessage = "Failed to fetch users";
+        if (axios.isAxiosError(err)) {
+          if (err.response?.data?.error) {
+            errorMessage = err.response.data.error;
+          } else if (err.message) {
+            errorMessage = err.message;
+          }
+        } else if (err instanceof Error) {
+          errorMessage = err.message;
+        }
         setError(errorMessage);
         console.error("Error fetching users:", err);
       } finally {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { ColumnDef } from "@tanstack/react-table";
 import {
   Search,
   Filter,
@@ -45,6 +46,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
+import { DataTable } from "@/components/ui/data-table";
 
 interface Product {
   id: number;
@@ -63,6 +65,40 @@ interface Product {
   updatedAt: string;
   manufacturerName: string | null;
 }
+
+const getStatusBadge = (status: Product["status"]) => {
+  const statusConfig = {
+    Verified: { variant: "default" as const, icon: CheckCircle },
+    Pending: { variant: "secondary" as const, icon: AlertCircle },
+    Expired: { variant: "destructive" as const, icon: AlertCircle },
+  };
+
+  const config = statusConfig[status];
+  const Icon = config.icon;
+
+  return (
+    <Badge variant={config.variant} className="flex items-center gap-1 w-fit">
+      <Icon className="h-3 w-3" />
+      {status}
+    </Badge>
+  );
+};
+
+const getStockStatus = (stock: number) => {
+  if (stock === 0)
+    return { label: "Out of Stock", className: "text-red-600" };
+  if (stock < 50) return { label: "Low Stock", className: "text-orange-600" };
+  return { label: "In Stock", className: "text-green-600" };
+};
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return "N/A";
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -102,31 +138,6 @@ export default function ProductsPage() {
   }, [fetchProducts]);
 
   const filteredProducts = products;
-
-  const getStatusBadge = (status: Product["status"]) => {
-    const statusConfig = {
-      Verified: { variant: "default" as const, icon: CheckCircle },
-      Pending: { variant: "secondary" as const, icon: AlertCircle },
-      Expired: { variant: "destructive" as const, icon: AlertCircle },
-    };
-
-    const config = statusConfig[status];
-    const Icon = config.icon;
-
-    return (
-      <Badge variant={config.variant} className="flex items-center gap-1 w-fit">
-        <Icon className="h-3 w-3" />
-        {status}
-      </Badge>
-    );
-  };
-
-  const getStockStatus = (stock: number) => {
-    if (stock === 0)
-      return { label: "Out of Stock", className: "text-red-600" };
-    if (stock < 50) return { label: "Low Stock", className: "text-orange-600" };
-    return { label: "In Stock", className: "text-green-600" };
-  };
 
   const handleViewDetails = (product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -194,16 +205,97 @@ export default function ProductsPage() {
     }
   };
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "N/A";
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
-
   const canAddProducts = user?.role === "manufacturer" || user?.role === "admin";
+
+  const columns: ColumnDef<Product>[] = [
+    {
+      accessorKey: "name",
+      header: "Product",
+      cell: ({ row }) => {
+        const product = row.original;
+        return (
+          <div>
+            <div className="font-medium">{product.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {product.productCode}
+            </div>
+            {product.category && (
+              <div className="text-xs text-primary">{product.category}</div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "manufacturerName",
+      header: "Manufacturer",
+      cell: ({ row }) => (
+        <span className="text-sm">
+          {row.original.manufacturerName ?? "N/A"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "batch",
+      header: "Batch",
+      cell: ({ row }) => (
+        <span className="text-sm font-mono">
+          {row.original.batch ?? "N/A"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "stock",
+      header: "Stock",
+      cell: ({ row }) => {
+        const stockStatus = getStockStatus(row.original.stock);
+        return (
+          <div className="flex flex-col">
+            <span className="text-sm">{row.original.stock} units</span>
+            <span className={`text-xs ${stockStatus.className}`}>
+              {stockStatus.label}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => getStatusBadge(row.original.status),
+    },
+    {
+      accessorKey: "updatedAt",
+      header: "Last Updated",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {formatDate(row.original.updatedAt)}
+        </span>
+      ),
+    },
+    {
+      id: "actions",
+      header: "View Details",
+      cell: ({ row }) => (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => handleViewDetails(row.original, e)}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>View Details</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ),
+    },
+  ];
 
   return (
     <div className="flex-1 p-6 bg-background text-foreground space-y-6">
@@ -372,113 +464,17 @@ export default function ProductsPage() {
             {filteredProducts.length !== 1 ? "s" : ""} found
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto border-collapse">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Product
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Manufacturer
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Batch
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Stock
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Last Updated
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    View Details
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Loading products...
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProducts.map((product) => {
-                    const stockStatus = getStockStatus(product.stock);
-                    return (
-                      <tr
-                        key={product.id}
-                        className="border-b border-border cursor-pointer hover:bg-muted/20"
-                        onClick={() => router.push(`/products/${product.id}`)}
-                      >
-                        <td className="px-4 py-3">
-                          <div>
-                            <div className="font-medium">{product.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {product.productCode}
-                            </div>
-                            {product.category && (
-                              <div className="text-xs text-primary">
-                                {product.category}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {product.manufacturerName ?? "N/A"}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-mono">
-                          {product.batch ?? "N/A"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col">
-                            <span className="text-sm">{product.stock} units</span>
-                            <span className={`text-xs ${stockStatus.className}`}>
-                              {stockStatus.label}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          {getStatusBadge(product.status)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {formatDate(product.updatedAt)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => handleViewDetails(product, e)}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>View Details</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {!loading && filteredProducts.length === 0 && (
+        <CardContent>
+          {loading ? (
             <div className="text-center py-8 text-muted-foreground">
-              No products found matching your criteria
+              Loading products...
             </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={filteredProducts}
+              onRowClick={(product) => router.push(`/products/${product.id}`)}
+            />
           )}
         </CardContent>
       </Card>

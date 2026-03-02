@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { ColumnDef } from "@tanstack/react-table";
 import {
   Search,
   Filter,
@@ -34,6 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ViewTransactionButton } from "@/components/products/view-transaction-button";
+import { DataTable } from "@/components/ui/data-table";
 
 interface Transaction {
   id: number;
@@ -50,6 +52,33 @@ interface Transaction {
   fromUserName: string | null;
   toUserName: string | null;
 }
+
+const getStatusConfig = (status: Transaction["status"]) => {
+  const config = {
+    Confirmed: {
+      variant: "default" as const,
+      icon: CheckCircle,
+      label: "Confirmed",
+    },
+    Pending: { variant: "secondary" as const, icon: Clock, label: "Pending" },
+    Failed: { variant: "destructive" as const, icon: Clock, label: "Failed" },
+  };
+  return config[status];
+};
+
+const formatTxHash = (hash: string) => {
+  return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
+};
+
+const formatDate = (dateStr: string) => {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 export default function TransactionsPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -93,19 +122,6 @@ export default function TransactionsPage() {
     );
   });
 
-  const getStatusConfig = (status: Transaction["status"]) => {
-    const config = {
-      Confirmed: {
-        variant: "default" as const,
-        icon: CheckCircle,
-        label: "Confirmed",
-      },
-      Pending: { variant: "secondary" as const, icon: Clock, label: "Pending" },
-      Failed: { variant: "destructive" as const, icon: Clock, label: "Failed" },
-    };
-    return config[status];
-  };
-
   const copyToClipboard = async (text: string, txId: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -114,20 +130,6 @@ export default function TransactionsPage() {
     } catch (err) {
       console.error("Failed to copy text: ", err);
     }
-  };
-
-  const formatTxHash = (hash: string) => {
-    return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   const handleExportData = () => {
@@ -154,6 +156,153 @@ export default function TransactionsPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const columns: ColumnDef<Transaction>[] = [
+    {
+      accessorKey: "txHash",
+      header: "Transaction",
+      cell: ({ row }) => {
+        const tx = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            {tx.txHash && (
+              <>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 hover:bg-muted"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(tx.txHash!, String(tx.id));
+                        }}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {copiedTxId === String(tx.id)
+                          ? "Copied!"
+                          : "Copy Tx Hash"}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <span className="font-mono text-sm text-primary">
+                  {formatTxHash(tx.txHash)}
+                </span>
+              </>
+            )}
+            {!tx.txHash && (
+              <span className="text-sm text-muted-foreground">N/A</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "productCode",
+      header: "Product",
+      cell: ({ row }) => {
+        const tx = row.original;
+        return (
+          <div>
+            <div className="text-sm font-medium">
+              {tx.productCode ?? "N/A"}
+            </div>
+            {tx.productName && (
+              <div className="text-xs text-muted-foreground">
+                {tx.productName}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "action",
+      header: "Action",
+      cell: ({ row }) => (
+        <span className="text-sm">{row.original.action}</span>
+      ),
+    },
+    {
+      id: "transfer",
+      header: "Transfer",
+      cell: ({ row }) => {
+        const tx = row.original;
+        return (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground truncate max-w-[100px]">
+              {tx.fromUserName ?? "N/A"}
+            </span>
+            <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
+            <span className="text-muted-foreground truncate max-w-[100px]">
+              {tx.toUserName ?? "N/A"}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "blockNumber",
+      header: "Block",
+      cell: ({ row }) => (
+        <span className="text-sm font-mono">
+          {row.original.blockNumber?.toLocaleString() ?? "N/A"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "createdAt",
+      header: "Timestamp",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {formatDate(row.original.createdAt)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const statusConfig = getStatusConfig(row.original.status);
+        const Icon = statusConfig.icon;
+        return (
+          <Badge
+            variant={statusConfig.variant}
+            className="flex items-center gap-1 w-fit"
+          >
+            <Icon className="h-3 w-3" />
+            {statusConfig.label}
+          </Badge>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const tx = row.original;
+        if (!tx.txHash) return null;
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ViewTransactionButton txHash={tx.txHash} />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>View Details</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="flex-1 p-6 bg-background text-foreground space-y-6">
@@ -262,156 +411,13 @@ export default function TransactionsPage() {
             {filteredTransactions.length !== 1 ? "s" : ""} found
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto border-collapse">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Transaction
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Product
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Action
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Transfer
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Block
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Timestamp
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-8 text-muted-foreground">
-                      Loading transactions...
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTransactions.map((tx) => {
-                    const statusConfig = getStatusConfig(tx.status);
-                    const Icon = statusConfig.icon;
-
-                    return (
-                      <tr
-                        key={tx.id}
-                        className="border-b border-border hover:bg-muted/20 transition-colors"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            {tx.txHash && (
-                              <>
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 hover:bg-muted"
-                                        onClick={() =>
-                                          copyToClipboard(tx.txHash!, String(tx.id))
-                                        }
-                                      >
-                                        <Copy className="h-3 w-3" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>
-                                        {copiedTxId === String(tx.id)
-                                          ? "Copied!"
-                                          : "Copy Tx Hash"}
-                                      </p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                                <span className="font-mono text-sm text-primary">
-                                  {formatTxHash(tx.txHash)}
-                                </span>
-                              </>
-                            )}
-                            {!tx.txHash && (
-                              <span className="text-sm text-muted-foreground">N/A</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div>
-                            <div className="text-sm font-medium">
-                              {tx.productCode ?? "N/A"}
-                            </div>
-                            {tx.productName && (
-                              <div className="text-xs text-muted-foreground">
-                                {tx.productName}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm">{tx.action}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground truncate max-w-[100px]">
-                              {tx.fromUserName ?? "N/A"}
-                            </span>
-                            <ArrowRightLeft className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-muted-foreground truncate max-w-[100px]">
-                              {tx.toUserName ?? "N/A"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm font-mono">
-                          {tx.blockNumber?.toLocaleString() ?? "N/A"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {formatDate(tx.createdAt)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge
-                            variant={statusConfig.variant}
-                            className="flex items-center gap-1 w-fit"
-                          >
-                            <Icon className="h-3 w-3" />
-                            {statusConfig.label}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          {tx.txHash && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <ViewTransactionButton txHash={tx.txHash} />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>View Details</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {!loading && filteredTransactions.length === 0 && (
+        <CardContent>
+          {loading ? (
             <div className="text-center py-8 text-muted-foreground">
-              No transactions found matching your criteria
+              Loading transactions...
             </div>
+          ) : (
+            <DataTable columns={columns} data={filteredTransactions} />
           )}
         </CardContent>
       </Card>
