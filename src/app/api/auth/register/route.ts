@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
 import { usersTable } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { hashPassword, createToken, setAuthCookie } from "@/lib/auth";
 
 export async function POST(req: Request) {
@@ -23,13 +23,51 @@ export async function POST(req: Request) {
       );
     }
 
-    // Validate role
-    const validRoles = ["manufacturer", "distributor", "pharmacist", "admin"];
+    // Validate role — admin registration is not allowed
+    const validRoles = ["manufacturer", "distributor", "pharmacist"];
     if (!validRoles.includes(body.role)) {
       return NextResponse.json(
         { error: "Invalid role" },
         { status: 400 },
       );
+    }
+
+    // Distributors and pharmacists must provide a wallet address and select a manufacturer
+    const needsManufacturer = body.role === "distributor" || body.role === "pharmacist";
+
+    if (needsManufacturer) {
+      if (!body.walletId) {
+        return NextResponse.json(
+          { error: "Wallet address is required for distributors and pharmacists" },
+          { status: 400 },
+        );
+      }
+
+      if (!body.manufacturerId) {
+        return NextResponse.json(
+          { error: "You must select a manufacturer" },
+          { status: 400 },
+        );
+      }
+
+      // Verify the manufacturer exists and is active
+      const manufacturer = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(
+          and(
+            eq(usersTable.id, Number(body.manufacturerId)),
+            eq(usersTable.role, "manufacturer"),
+            eq(usersTable.status, "active"),
+          ),
+        );
+
+      if (manufacturer.length === 0) {
+        return NextResponse.json(
+          { error: "Selected manufacturer not found or is not active" },
+          { status: 400 },
+        );
+      }
     }
 
     // Validate password length
@@ -71,6 +109,9 @@ export async function POST(req: Request) {
     // Hash password
     const hashedPassword = await hashPassword(body.password);
 
+    // Determine status: manufacturers are active immediately, others need approval
+    const status = body.role === "manufacturer" ? "active" : "pending";
+
     // Create user
     const inserted = await db
       .insert(usersTable)
@@ -82,6 +123,8 @@ export async function POST(req: Request) {
         organization: body.organization,
         phone: body.phone,
         walletId: body.walletId || "",
+        status,
+        manufacturerId: needsManufacturer ? Number(body.manufacturerId) : null,
       })
       .returning({
         id: usersTable.id,
@@ -91,20 +134,34 @@ export async function POST(req: Request) {
         organization: usersTable.organization,
         phone: usersTable.phone,
         walletId: usersTable.walletId,
+        status: usersTable.status,
       });
 
     const user = inserted[0];
 
-    // Auto-login: create JWT and set cookie
-    const token = await createToken({
-      userId: user.id,
-      email: user.email ?? "",
-      role: user.role,
-    });
+    // Only auto-login active users (manufacturers)
+    if (user.status === "active") {
+      const token = await createToken({
+        userId: user.id,
+        email: user.email ?? "",
+        role: user.role,
+      });
 
-    await setAuthCookie(token);
+      await setAuthCookie(token);
 
-    return NextResponse.json({ user }, { status: 201 });
+      return NextResponse.json({ user }, { status: 201 });
+    }
+
+    // Pending users get a success message but no session
+    return NextResponse.json(
+      {
+        user,
+        pending: true,
+        message:
+          "Registration submitted successfully. Your account is pending approval from the manufacturer.",
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(

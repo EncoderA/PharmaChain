@@ -22,13 +22,15 @@ interface User {
   role: "manufacturer" | "distributor" | "pharmacist" | "admin";
   organization: string;
   walletId: string;
+  status: "active" | "pending" | "rejected";
 }
 
 interface UserFiltersClientProps {
   users: User[];
+  onDelete?: () => void;
 }
 
-export function UserFiltersClient({ users }: UserFiltersClientProps) {
+export function UserFiltersClient({ users, onDelete }: UserFiltersClientProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
 
@@ -132,7 +134,7 @@ export function UserFiltersClient({ users }: UserFiltersClientProps) {
                     {user.walletId}
                   </TableCell>
                   <TableCell className="text-right">
-                    <UserActions userId={user.id} />
+                    <UserActions userId={user.id} userName={user.fullName} onDelete={onDelete} />
                   </TableCell>
                 </TableRow>
               ))
