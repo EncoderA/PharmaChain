@@ -55,18 +55,20 @@ export async function GET() {
       txStatusMap[row.status] = row.count;
     }
 
-    // Total users count
+    // Total active users count
     const [userCount] = await db
       .select({ count: count() })
-      .from(usersTable);
+      .from(usersTable)
+      .where(eq(usersTable.status, "active"));
 
-    // Users by role
+    // Active users by role
     const roleCounts = await db
       .select({
         role: usersTable.role,
         count: count(),
       })
       .from(usersTable)
+      .where(eq(usersTable.status, "active"))
       .groupBy(usersTable.role);
 
     const roleMap: Record<string, number> = {};

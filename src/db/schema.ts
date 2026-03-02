@@ -28,6 +28,12 @@ export const transactionStatusEnum = pgEnum("transaction_status", [
   "Failed",
 ]);
 
+export const userStatusEnum = pgEnum("user_status", [
+  "active",
+  "pending",
+  "rejected",
+]);
+
 // ==================== USERS ====================
 
 export const usersTable = pgTable("users", {
@@ -39,6 +45,8 @@ export const usersTable = pgTable("users", {
   role: userRoleEnum("role").notNull(),
   walletId: varchar({ length: 50 }).notNull(),
   password: varchar({ length: 255 }), // nullable — existing users have no password yet
+  status: userStatusEnum("status").default("pending").notNull(),
+  manufacturerId: integer("manufacturer_id"), // FK to usersTable.id — the manufacturer this user registered under
 });
 
 // ==================== PRODUCTS ====================

@@ -38,6 +38,20 @@ export async function POST(req: Request) {
       );
     }
 
+    // Block pending / rejected users
+    if (user.status === "pending") {
+      return NextResponse.json(
+        { error: "Your account is awaiting approval from the manufacturer." },
+        { status: 403 },
+      );
+    }
+    if (user.status === "rejected") {
+      return NextResponse.json(
+        { error: "Your registration was rejected. Please contact the manufacturer." },
+        { status: 403 },
+      );
+    }
+
     // Verify password
     const isValid = await verifyPassword(body.password, user.password);
     if (!isValid) {
@@ -66,6 +80,7 @@ export async function POST(req: Request) {
         phone: user.phone,
         role: user.role,
         walletId: user.walletId,
+        status: user.status,
       },
     });
   } catch (error) {

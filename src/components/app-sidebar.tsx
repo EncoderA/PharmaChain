@@ -8,6 +8,7 @@ import {
   Settings,
   LayoutDashboard,
   User,
+  type LucideIcon,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -27,7 +28,18 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useUser } from "@/contexts/user-context"
 
-const navItems = [
+type UserRole = "manufacturer" | "distributor" | "pharmacist" | "admin";
+
+interface NavItem {
+  title: string;
+  name: string;
+  url: string;
+  icon: LucideIcon;
+  /** If set, only these roles can see this item. If omitted, all roles can see it. */
+  allowedRoles?: UserRole[];
+}
+
+const navItems: NavItem[] = [
   {
     title: "Dashboard",
     name: "Dashboard",
@@ -57,6 +69,7 @@ const navItems = [
     name: "User Management",
     url: "/users",
     icon: User,
+    allowedRoles: ["admin", "manufacturer"],
   },
 ];
 
@@ -68,7 +81,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { user } = useUser()
 
-  const navMainWithActive = navItems.map((item) => ({
+  // Filter nav items based on the user's role
+  const visibleItems = navItems.filter((item) => {
+    if (!item.allowedRoles) return true;
+    if (!user?.role) return false;
+    return item.allowedRoles.includes(user.role);
+  });
+
+  const navMainWithActive = visibleItems.map((item) => ({
     ...item,
     isActive: pathname.startsWith(item.url),
   }))

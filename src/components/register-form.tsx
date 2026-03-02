@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,14 +21,46 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useUser } from "@/contexts/user-context";
+import { CheckCircle2 } from "lucide-react";
 import axios from "axios";
+
+interface Manufacturer {
+  id: number;
+  fullName: string;
+  organization: string;
+}
 
 export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState("");
+  const [manufacturerId, setManufacturerId] = useState("");
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [loadingManufacturers, setLoadingManufacturers] = useState(false);
+  const [pendingSuccess, setPendingSuccess] = useState(false);
   const router = useRouter();
   const { refreshUser } = useUser();
+
+  const needsManufacturer = role === "distributor" || role === "pharmacist";
+
+  // Fetch manufacturers when a role that needs approval is selected
+  useEffect(() => {
+    if (needsManufacturer && manufacturers.length === 0) {
+      setLoadingManufacturers(true);
+      axios
+        .get("/api/manufacturers")
+        .then((res) => setManufacturers(res.data))
+        .catch(() => setManufacturers([]))
+        .finally(() => setLoadingManufacturers(false));
+    }
+  }, [needsManufacturer, manufacturers.length]);
+
+  // Reset manufacturer selection when role changes
+  useEffect(() => {
+    if (!needsManufacturer) {
+      setManufacturerId("");
+    }
+  }, [needsManufacturer]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -36,7 +68,7 @@ export function RegisterForm() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const data = {
+    const data: Record<string, string> = {
       fullName: formData.get("fullName") as string,
       email: formData.get("email") as string,
       password: formData.get("password") as string,
@@ -46,9 +78,25 @@ export function RegisterForm() {
       walletId: (formData.get("walletId") as string) || "",
     };
 
+    if (needsManufacturer) {
+      data.manufacturerId = manufacturerId;
+    }
+
     // Client-side validation
     if (!data.fullName || !data.email || !data.password || !data.role || !data.organization || !data.phone) {
       setError("Please fill in all required fields");
+      setLoading(false);
+      return;
+    }
+
+    if (needsManufacturer && !data.walletId) {
+      setError("Wallet address is required for distributors and pharmacists");
+      setLoading(false);
+      return;
+    }
+
+    if (needsManufacturer && !data.manufacturerId) {
+      setError("Please select a manufacturer");
       setLoading(false);
       return;
     }
@@ -69,15 +117,15 @@ export function RegisterForm() {
     try {
       const res = await axios.post("/api/auth/register", data);
 
-      // Auto-logged in via cookie set by the API
-      await refreshUser();
-
-      const user = res.data.user;
-      if (user.role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/dashboard");
+      // If user is pending approval, show success message instead of redirecting
+      if (res.data.pending) {
+        setPendingSuccess(true);
+        return;
       }
+
+      // Active users (manufacturers) are auto-logged in
+      await refreshUser();
+      router.push("/dashboard");
     } catch (err: any) {
       setError(
         err?.response?.data?.error || err?.message || "Registration failed. Please try again."
@@ -86,6 +134,38 @@ export function RegisterForm() {
       setLoading(false);
     }
   };
+
+  // Show pending approval success screen
+  if (pendingSuccess) {
+    return (
+      <div className="flex flex-col gap-6">
+        <Card>
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <CheckCircle2 className="h-16 w-16 text-green-500" />
+            </div>
+            <CardTitle className="text-xl">Registration Submitted</CardTitle>
+            <CardDescription className="text-base mt-2">
+              Your account has been created and is pending approval from the
+              manufacturer. You will be able to log in once your account is
+              approved.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3">
+              <Button
+                variant="outline"
+                className="w-full cursor-pointer"
+                onClick={() => router.push("/login")}
+              >
+                Go to Login
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -160,13 +240,46 @@ export function RegisterForm() {
                     <SelectValue placeholder="Select your role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="manufacturer">Manufacturer</SelectItem>
                     <SelectItem value="distributor">Distributor</SelectItem>
                     <SelectItem value="pharmacist">Pharmacist / Wholesaler</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Manufacturer Selection — shown only for distributor/pharmacist */}
+              {needsManufacturer && (
+                <div className="grid gap-2">
+                  <Label>Select Manufacturer</Label>
+                  {loadingManufacturers ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                      <Spinner className="h-4 w-4" />
+                      Loading manufacturers...
+                    </div>
+                  ) : manufacturers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2">
+                      No manufacturers available. Please try again later.
+                    </p>
+                  ) : (
+                    <Select
+                      onValueChange={setManufacturerId}
+                      value={manufacturerId}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a manufacturer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {manufacturers.map((m) => (
+                          <SelectItem key={m.id} value={String(m.id)}>
+                            {m.organization} ({m.fullName})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              )}
 
               {/* Organization */}
               <div className="grid gap-2">
@@ -190,16 +303,21 @@ export function RegisterForm() {
                 />
               </div>
 
-              {/* Wallet ID (optional) */}
+              {/* Wallet Address */}
               <div className="grid gap-2">
                 <Label htmlFor="walletId">
-                  Wallet Address{" "}
-                  <span className="text-muted-foreground text-xs">(optional)</span>
+                  Wallet Address
+                  {needsManufacturer ? (
+                    <span className="text-destructive text-xs ml-1">*</span>
+                  ) : (
+                    <span className="text-muted-foreground text-xs ml-1">(optional)</span>
+                  )}
                 </Label>
                 <Input
                   id="walletId"
                   name="walletId"
                   placeholder="0x..."
+                  required={needsManufacturer}
                 />
               </div>
 

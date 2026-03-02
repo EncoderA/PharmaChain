@@ -95,6 +95,7 @@ export type AuthUser = {
   phone: string;
   role: "manufacturer" | "distributor" | "pharmacist" | "admin";
   walletId: string;
+  status: "active" | "pending" | "rejected";
 };
 
 /**
@@ -117,6 +118,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
       phone: usersTable.phone,
       role: usersTable.role,
       walletId: usersTable.walletId,
+      status: usersTable.status,
     })
     .from(usersTable)
     .where(eq(usersTable.id, payload.userId));

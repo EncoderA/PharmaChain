@@ -11,10 +11,7 @@ const publicPaths = [
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/register",
-  "/dashboard",
-  "/users",
-  "/reports",
-  "/api/dashboard/stats",
+  "/api/manufacturers",
 ];
 
 // Routes that start with these prefixes are public
@@ -24,11 +21,15 @@ const publicPrefixes = [
   "/favicon.ico",
   "/logo.svg",
   "/avatars/",
-  "/dashboard",
-  "/users",
-  "/reports",
-  "/api/dashboard/stats",
 ];
+
+// Routes restricted to specific roles
+// Key = path prefix, Value = allowed roles
+const roleRestrictions: Record<string, string[]> = {
+  "/users": ["admin", "manufacturer"],
+  "/api/user": ["admin", "manufacturer"],
+  "/admin": ["admin"],
+};
 
 function isPublicPath(pathname: string): boolean {
   if (publicPaths.includes(pathname)) return true;
@@ -43,7 +44,16 @@ function getJwtSecret() {
   return new TextEncoder().encode(secret);
 }
 
-export async function middleware(req: NextRequest) {
+function getRoleRestriction(pathname: string): string[] | null {
+  for (const [prefix, roles] of Object.entries(roleRestrictions)) {
+    if (pathname === prefix || pathname.startsWith(prefix + "/") || pathname.startsWith(prefix + "?")) {
+      return roles;
+    }
+  }
+  return null;
+}
+
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Allow public routes
@@ -63,9 +73,19 @@ export async function middleware(req: NextRequest) {
   // Verify token
   try {
     const { payload } = await jwtVerify(token, getJwtSecret());
+    const userRole = payload.role as string;
 
-    // Admin route protection
-    if (pathname.startsWith("/admin") && payload.role !== "admin") {
+    // Check role-based route restrictions
+    const allowedRoles = getRoleRestriction(pathname);
+    if (allowedRoles && !allowedRoles.includes(userRole)) {
+      // For API routes, return 403 JSON response
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          { error: "Forbidden — insufficient permissions" },
+          { status: 403 },
+        );
+      }
+      // For page routes, redirect to dashboard
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
@@ -83,7 +103,7 @@ export const config = {
   matcher: [
     /*
      * Match all paths except static files and images.
-     * This runs the middleware on all page/api routes.
+     * This runs the proxy on all page/api routes.
      */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
