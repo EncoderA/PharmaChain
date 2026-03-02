@@ -24,22 +24,6 @@ interface UserFiltersClientProps {
   onDelete?: () => void;
 }
 
-export function UserFiltersClient({ users }: UserFiltersClientProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
-
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.organization.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesRole =
-      roleFilter === "all" || user.role.toLowerCase() === roleFilter;
-
-    return matchesSearch && matchesRole;
-  });
-
 const getRoleBadgeColor = (role: string) => {
   const colors: Record<string, string> = {
     manufacturer: "bg-purple-500/10 text-purple-500 border-purple-500/20",
@@ -148,70 +132,7 @@ export function UserFiltersClient({ users }: UserFiltersClientProps) {
         Showing {filteredUsers.length} of {users.length} users
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Organization</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Wallet ID</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredUsers.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="text-center py-8 text-muted-foreground"
-                >
-                  No users found matching your criteria
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                          {getInitials(user.fullName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium text-sm">
-                          {user.fullName}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {user.email}
-                        </div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={getRoleBadgeColor(user.role)}
-                    >
-                      {user.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">{user.organization}</TableCell>
-                  <TableCell className="text-sm">{user.phone}</TableCell>
-                  <TableCell className="text-sm break-all">
-                    {user.walletId}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <UserActions userId={user.id} />
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable columns={columns} data={filteredUsers} />
     </div>
   );
 }

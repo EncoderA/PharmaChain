@@ -56,35 +56,6 @@ const UsersPage = () => {
     }
   }, [currentUser, userLoading, router]);
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await fetch("/api/user", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error || `Failed to fetch users (${response.status})`,
-        );
-      }
-
-      const data = await response.json();
-      setUsers(data);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to fetch users";
-      setError(errorMessage);
-      console.error("Error fetching users:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
   const fetchUsers = async () => {
     try {
       setLoading(true);
