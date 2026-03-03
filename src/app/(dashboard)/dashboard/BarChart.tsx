@@ -28,6 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
+
 const chartData = [
   { date: "2025-06-01", visitors: 178 },
   { date: "2025-06-02", visitors: 470 },
