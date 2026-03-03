@@ -44,7 +44,7 @@ export function RegisterForm() {
   const { refreshUser } = useUser();
   const { registerAsManufacturer } = useSupplyChainContract();
 
-  const needsManufacturer = role === "distributor" || role === "pharmacist";
+  const needsManufacturer = role === "distributor" || role === "pharmacist" || role === "wholesaler";
 
   // Fetch manufacturers when a role that needs approval is selected
   useEffect(() => {
@@ -259,7 +259,8 @@ export function RegisterForm() {
                   <SelectContent>
                     <SelectItem value="manufacturer">Manufacturer</SelectItem>
                     <SelectItem value="distributor">Distributor</SelectItem>
-                    <SelectItem value="pharmacist">Pharmacist / Wholesaler</SelectItem>
+                    <SelectItem value="wholesaler">Wholesaler</SelectItem>
+                    <SelectItem value="pharmacist">Pharmacist</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

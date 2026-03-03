@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     }
 
     // Validate role — admin registration is not allowed via public signup
-    const validRoles = ["manufacturer", "distributor", "pharmacist"];
+    const validRoles = ["manufacturer", "distributor", "pharmacist", "wholesaler"];
     if (!validRoles.includes(body.role)) {
       return NextResponse.json(
         { error: "Invalid role" },
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     }
 
     // Distributors and pharmacists must select a manufacturer
-    const needsManufacturer = body.role === "distributor" || body.role === "pharmacist";
+    const needsManufacturer = body.role === "distributor" || body.role === "pharmacist" || body.role === "wholesaler";
 
     if (needsManufacturer) {
       if (!body.manufacturerId) {

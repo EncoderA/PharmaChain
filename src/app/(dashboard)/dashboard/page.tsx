@@ -30,11 +30,15 @@ import {
   XCircle,
   CheckCircle,
   ArrowRight,
+  Package,
+  ArrowDownToLine,
+  ArrowUpFromLine,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import Calendar27 from "./BarChart";
 import { useSupplyChainContract, Stage } from "@/hooks/use-supply-chain-contract";
 import type { DrugStruct } from "@/hooks/use-supply-chain-contract";
+import { useUser } from "@/contexts/user-context";
 
 interface DashboardStats {
   products: {
@@ -55,6 +59,7 @@ interface DashboardStats {
     manufacturers: number;
     distributors: number;
     pharmacists: number;
+    wholesalers: number;
     admins: number;
   };
 }
@@ -62,6 +67,7 @@ interface DashboardStats {
 interface JourneyStep {
   address: string;
   name: string;
+  role: string;
 }
 
 const stageLabels: Record<number, string> = {
@@ -81,6 +87,7 @@ const stageIcons: Record<number, typeof Factory> = {
 export default function SupplyChainDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const { user } = useUser();
 
   // Track Product state
   const [trackOpen, setTrackOpen] = useState(false);
@@ -90,6 +97,7 @@ export default function SupplyChainDashboard() {
   const [trackResult, setTrackResult] = useState<{
     drug: DrugStruct;
     journey: JourneyStep[];
+    currentOwnerName: string;
   } | null>(null);
 
   // Verify Authenticity state
@@ -165,11 +173,20 @@ export default function SupplyChainDashboard() {
     };
   }, [verifyDrugId, getDrugDetails]);
 
-  /** Resolve wallet addresses to user names from the database */
+  /** Role abbreviation labels for the journey display */
+  const rolePrefixes: Record<string, string> = {
+    manufacturer: "Manu",
+    distributor: "Dist",
+    pharmacist: "Pharm",
+    wholesaler: "Whol",
+    admin: "Admin",
+  };
+
+  /** Resolve wallet addresses to user details from the database */
   const resolveAddresses = async (
     addresses: string[]
-  ): Promise<Map<string, string>> => {
-    const map = new Map<string, string>();
+  ): Promise<Map<string, { name: string; role: string }>> => {
+    const map = new Map<string, { name: string; role: string }>();
     try {
       const res = await fetch("/api/user");
       if (res.ok) {
@@ -177,29 +194,39 @@ export default function SupplyChainDashboard() {
           fullName: string;
           walletId: string;
           organization: string;
+          role: string;
         }[] = await res.json();
         for (const addr of addresses) {
-          const user = users.find(
+          const matched = users.find(
             (u) => u.walletId.toLowerCase() === addr.toLowerCase()
           );
-          map.set(
-            addr.toLowerCase(),
-            user
-              ? `${user.fullName} (${user.organization})`
-              : addr === "0x0000000000000000000000000000000000000000"
-                ? "Sold to Customer"
-                : `${addr.slice(0, 6)}...${addr.slice(-4)}`
-          );
+          if (matched) {
+            const prefix = rolePrefixes[matched.role] ?? matched.role;
+            map.set(addr.toLowerCase(), {
+              name: `${prefix} (${matched.organization})`,
+              role: matched.role,
+            });
+          } else if (addr === "0x0000000000000000000000000000000000000000") {
+            map.set(addr.toLowerCase(), {
+              name: "Sold to Customer",
+              role: "customer",
+            });
+          } else {
+            map.set(addr.toLowerCase(), {
+              name: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+              role: "unknown",
+            });
+          }
         }
       }
     } catch {
       // fallback: just show truncated addresses
       for (const addr of addresses) {
         if (!map.has(addr.toLowerCase())) {
-          map.set(
-            addr.toLowerCase(),
-            `${addr.slice(0, 6)}...${addr.slice(-4)}`
-          );
+          map.set(addr.toLowerCase(), {
+            name: `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+            role: "unknown",
+          });
         }
       }
     }
@@ -225,14 +252,29 @@ export default function SupplyChainDashboard() {
         getDrugJourney(drugId),
       ]);
 
-      // Resolve addresses to names
-      const nameMap = await resolveAddresses(journeyAddresses);
-      const journey: JourneyStep[] = journeyAddresses.map((addr) => ({
-        address: addr,
-        name: nameMap.get(addr.toLowerCase()) ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
-      }));
+      // Resolve all addresses (journey + current owner) in one call
+      const allAddresses = [...journeyAddresses];
+      if (!allAddresses.some((a) => a.toLowerCase() === drug.currentOwner.toLowerCase())) {
+        allAddresses.push(drug.currentOwner);
+      }
+      const nameMap = await resolveAddresses(allAddresses);
 
-      setTrackResult({ drug, journey });
+      const journey: JourneyStep[] = journeyAddresses.map((addr) => {
+        const resolved = nameMap.get(addr.toLowerCase());
+        return {
+          address: addr,
+          name: resolved?.name ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+          role: resolved?.role ?? "unknown",
+        };
+      });
+
+      const currentOwnerResolved = nameMap.get(drug.currentOwner.toLowerCase());
+      const currentOwnerName =
+        drug.currentOwner === "0x0000000000000000000000000000000000000000"
+          ? "Sold (no owner)"
+          : currentOwnerResolved?.name ?? `${drug.currentOwner.slice(0, 6)}...${drug.currentOwner.slice(-4)}`;
+
+      setTrackResult({ drug, journey, currentOwnerName });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
       if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
@@ -272,8 +314,9 @@ export default function SupplyChainDashboard() {
 
       // Resolve owner name
       const nameMap = await resolveAddresses([result.currentOwner]);
+      const resolved = nameMap.get(result.currentOwner.toLowerCase());
       const ownerName =
-        nameMap.get(result.currentOwner.toLowerCase()) ??
+        resolved?.name ??
         `${result.currentOwner.slice(0, 6)}...${result.currentOwner.slice(-4)}`;
 
       setVerifyResult({
@@ -303,54 +346,248 @@ export default function SupplyChainDashboard() {
     });
   };
 
-  const statCards = [
-    {
-      label: "Total Products",
-      value: stats?.products.total ?? 0,
-    },
-    {
-      label: "Transactions Processed",
-      value: stats?.transactions.total ?? 0,
-    },
-    {
-      label: "Active Users",
-      value: stats?.users.total ?? 0,
-    },
-  ];
+  // Role-aware stat cards
+  const getStatCards = () => {
+    const role = user?.role;
 
-  const activities = [
-    {
-      icon: <PlusIcon />,
-      title: "Product Added",
-      detail: `${stats?.products.pending ?? 0} pending verification`,
-      color: "bg-primary/20 text-primary",
-    },
-    {
-      icon: <ShoppingCart />,
-      title: "Products Verified",
-      detail: `${stats?.products.verified ?? 0} verified products`,
-      color: "bg-primary/20 text-primary",
-    },
-    {
-      icon: <WarehouseIcon />,
-      title: "Transactions Confirmed",
-      detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
-      color: "bg-primary/20 text-primary",
-    },
-    {
-      icon: <CheckIcon />,
-      title: "Low Stock Alerts",
-      detail: `${stats?.products.lowStock ?? 0} products with low stock`,
-      color: "bg-primary/20 text-primary",
-    },
-    {
-      icon: <CheckIcon />,
-      title: "Expired Products",
-      detail: `${stats?.products.expired ?? 0} expired`,
-      color: "bg-primary/20 text-primary",
-      isLast: true,
-    },
-  ];
+    if (role === "distributor") {
+      return [
+        {
+          label: "My Inventory",
+          value: stats?.products.total ?? 0,
+          icon: Package,
+        },
+        {
+          label: "My Transactions",
+          value: stats?.transactions.total ?? 0,
+          icon: Truck,
+        },
+        {
+          label: "Forwarded",
+          value: stats?.transactions.confirmed ?? 0,
+          icon: ArrowUpFromLine,
+        },
+      ];
+    }
+
+    if (role === "pharmacist") {
+      return [
+        {
+          label: "My Inventory",
+          value: stats?.products.total ?? 0,
+          icon: Package,
+        },
+        {
+          label: "My Transactions",
+          value: stats?.transactions.total ?? 0,
+          icon: Truck,
+        },
+        {
+          label: "Products Sold",
+          value: stats?.transactions.confirmed ?? 0,
+          icon: Store,
+        },
+      ];
+    }
+
+    if (role === "wholesaler") {
+      return [
+        {
+          label: "My Inventory",
+          value: stats?.products.total ?? 0,
+          icon: Package,
+        },
+        {
+          label: "My Transactions",
+          value: stats?.transactions.total ?? 0,
+          icon: Truck,
+        },
+        {
+          label: "Products Sold",
+          value: stats?.transactions.confirmed ?? 0,
+          icon: Store,
+        },
+      ];
+    }
+
+    if (role === "manufacturer") {
+      return [
+        {
+          label: "My Products",
+          value: stats?.products.total ?? 0,
+          icon: Factory,
+        },
+        {
+          label: "My Transactions",
+          value: stats?.transactions.total ?? 0,
+          icon: Truck,
+        },
+        {
+          label: "Active Users",
+          value: stats?.users.total ?? 0,
+          icon: CheckCircle,
+        },
+      ];
+    }
+
+    // Admin — global view
+    return [
+      {
+        label: "Total Products",
+        value: stats?.products.total ?? 0,
+        icon: Package,
+      },
+      {
+        label: "Transactions Processed",
+        value: stats?.transactions.total ?? 0,
+        icon: Truck,
+      },
+      {
+        label: "Active Users",
+        value: stats?.users.total ?? 0,
+        icon: CheckCircle,
+      },
+    ];
+  };
+
+  // Role-aware activity items
+  const getActivities = () => {
+    const role = user?.role;
+
+    if (role === "distributor") {
+      return [
+        {
+          icon: <ArrowDownToLine />,
+          title: "Products in Inventory",
+          detail: `${stats?.products.total ?? 0} products currently held`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <CheckIcon />,
+          title: "Verified Products",
+          detail: `${stats?.products.verified ?? 0} verified in inventory`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <ArrowUpFromLine />,
+          title: "Transactions Confirmed",
+          detail: `${stats?.transactions.confirmed ?? 0} transfers confirmed`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <AlertCircle />,
+          title: "Pending Transactions",
+          detail: `${stats?.transactions.pending ?? 0} awaiting confirmation`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <XCircle />,
+          title: "Expired Products",
+          detail: `${stats?.products.expired ?? 0} expired / rejected`,
+          color: "bg-primary/20 text-primary",
+          isLast: true,
+        },
+      ];
+    }
+
+    if (role === "pharmacist") {
+      return [
+        {
+          icon: <Package />,
+          title: "Products in Stock",
+          detail: `${stats?.products.total ?? 0} products on hand`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <ShoppingCart />,
+          title: "Products Verified",
+          detail: `${stats?.products.verified ?? 0} verified products`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <WarehouseIcon />,
+          title: "Transactions Confirmed",
+          detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <CheckIcon />,
+          title: "Low Stock Alerts",
+          detail: `${stats?.products.lowStock ?? 0} products with low stock`,
+          color: "bg-primary/20 text-primary",
+          isLast: true,
+        },
+      ];
+    }
+
+    if (role === "wholesaler") {
+      return [
+        {
+          icon: <Package />,
+          title: "Products in Stock",
+          detail: `${stats?.products.total ?? 0} products on hand`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <ShoppingCart />,
+          title: "Products Verified",
+          detail: `${stats?.products.verified ?? 0} verified products`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <WarehouseIcon />,
+          title: "Transactions Confirmed",
+          detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
+          color: "bg-primary/20 text-primary",
+        },
+        {
+          icon: <CheckIcon />,
+          title: "Low Stock Alerts",
+          detail: `${stats?.products.lowStock ?? 0} products with low stock`,
+          color: "bg-primary/20 text-primary",
+          isLast: true,
+        },
+      ];
+    }
+
+    // Admin and Manufacturer — original activity set
+    return [
+      {
+        icon: <PlusIcon />,
+        title: "Product Added",
+        detail: `${stats?.products.pending ?? 0} pending verification`,
+        color: "bg-primary/20 text-primary",
+      },
+      {
+        icon: <ShoppingCart />,
+        title: "Products Verified",
+        detail: `${stats?.products.verified ?? 0} verified products`,
+        color: "bg-primary/20 text-primary",
+      },
+      {
+        icon: <WarehouseIcon />,
+        title: "Transactions Confirmed",
+        detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
+        color: "bg-primary/20 text-primary",
+      },
+      {
+        icon: <CheckIcon />,
+        title: "Low Stock Alerts",
+        detail: `${stats?.products.lowStock ?? 0} products with low stock`,
+        color: "bg-primary/20 text-primary",
+      },
+      {
+        icon: <CheckIcon />,
+        title: "Expired Products",
+        detail: `${stats?.products.expired ?? 0} expired`,
+        color: "bg-primary/20 text-primary",
+        isLast: true,
+      },
+    ];
+  };
+
+  const statCards = getStatCards();
+  const activities = getActivities();
 
   return (
     <div className="flex-1 bg-background">
@@ -468,12 +705,15 @@ export default function SupplyChainDashboard() {
                         <span className="text-muted-foreground">
                           Current Owner:
                         </span>
-                        <p className="font-mono text-xs break-all">
-                          {trackResult.drug.currentOwner ===
-                          "0x0000000000000000000000000000000000000000"
-                            ? "Sold (no owner)"
-                            : `${trackResult.drug.currentOwner.slice(0, 10)}...${trackResult.drug.currentOwner.slice(-6)}`}
+                        <p className="text-sm font-medium">
+                          {trackResult.currentOwnerName}
                         </p>
+                        {trackResult.drug.currentOwner !==
+                          "0x0000000000000000000000000000000000000000" && (
+                          <p className="text-xs text-muted-foreground font-mono break-all">
+                            {trackResult.drug.currentOwner}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <span className="text-muted-foreground">Mfg Date:</span>
@@ -509,31 +749,44 @@ export default function SupplyChainDashboard() {
                     </div>
                   )}
 
-                  {/* Journey */}
+                   {/* Journey */}
                   <div>
                     <h4 className="font-semibold text-sm mb-3">
                       Ownership Journey ({trackResult.journey.length} step
                       {trackResult.journey.length !== 1 ? "s" : ""})
                     </h4>
-                    <div className="space-y-2">
-                      {trackResult.journey.map((step, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
-                            {index + 1}
+                    <div className="space-y-3">
+                      {trackResult.journey.map((step, index) => {
+                        const roleIconMap: Record<string, typeof Factory> = {
+                          manufacturer: Factory,
+                          distributor: Truck,
+                          pharmacist: Store,
+                          wholesaler: Building2,
+                          admin: Building2,
+                        };
+                        const StepIcon = roleIconMap[step.role] ?? Building2;
+                        return (
+                          <div key={index} className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                              {index + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <StepIcon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                <p className="text-sm font-semibold">
+                                  {step.name}
+                                </p>
+                              </div>
+                              <p className="text-xs text-muted-foreground font-mono break-all mt-0.5">
+                                {step.address}
+                              </p>
+                            </div>
+                            {index < trackResult.journey.length - 1 && (
+                              <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
+                            )}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {step.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground font-mono truncate">
-                              {step.address}
-                            </p>
-                          </div>
-                          {index < trackResult.journey.length - 1 && (
-                            <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

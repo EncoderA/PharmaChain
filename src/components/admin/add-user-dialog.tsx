@@ -25,7 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { AlertCircle, Plus } from "lucide-react";
 import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
-type UserRole = "admin" | "manufacturer" | "distributor" | "pharmacist";
+type UserRole = "admin" | "manufacturer" | "distributor" | "pharmacist" | "wholesaler";
 
 interface AddUserDialogProps {
   onUserAdded: () => void;
@@ -80,6 +80,9 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
           break;
         case "pharmacist":
           // pharmacist = wholesaler on-chain
+          await addWholesaler(data.walletId);
+          break;
+        case "wholesaler":
           await addWholesaler(data.walletId);
           break;
         default:
@@ -153,7 +156,8 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="manufacturer">Manufacturer</SelectItem>
                 <SelectItem value="distributor">Distributor</SelectItem>
-                <SelectItem value="pharmacist">Pharmacist / Wholesaler</SelectItem>
+                <SelectItem value="wholesaler">Wholesaler</SelectItem>
+                <SelectItem value="pharmacist">Pharmacist</SelectItem>
               </SelectContent>
             </Select>
           </div>

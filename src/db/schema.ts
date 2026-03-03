@@ -13,6 +13,7 @@ export const userRoleEnum = pgEnum("user_role", [
   "manufacturer",
   "distributor",
   "pharmacist",
+  "wholesaler",
   "admin",
 ]);
 

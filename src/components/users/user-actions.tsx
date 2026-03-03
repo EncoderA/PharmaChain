@@ -46,6 +46,7 @@ export function UserActions({ userId, userName, userRole, walletId, onDelete }: 
    * - manufacturer → removeManufacturer(address)
    * - distributor  → removeDistributor(address)
    * - pharmacist   → removeWholesaler(address)  (pharmacist = wholesaler on-chain)
+   * - wholesaler   → removeWholesaler(address)
    */
   const removeOnChain = async (address: string, role: string) => {
     switch (role) {
@@ -56,6 +57,7 @@ export function UserActions({ userId, userName, userRole, walletId, onDelete }: 
       case "distributor":
         return removeDistributor(address);
       case "pharmacist":
+      case "wholesaler":
         return removeWholesaler(address);
       default:
         throw new Error(`Unknown role: ${role}`);

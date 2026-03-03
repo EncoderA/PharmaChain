@@ -15,9 +15,10 @@ export type User = {
   organization: string;
   email: string | null;
   phone: string;
-  role: "manufacturer" | "distributor" | "pharmacist" | "admin";
+  role: "manufacturer" | "distributor" | "pharmacist" | "wholesaler" | "admin";
   walletId: string;
   status: "active" | "pending" | "rejected";
+  manufacturerId: number | null;
 };
 
 interface UserContextValue {

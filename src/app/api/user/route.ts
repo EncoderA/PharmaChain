@@ -4,7 +4,7 @@ import { usersTable } from "@/db/schema";
 import { and, eq, or } from "drizzle-orm";
 import { hashPassword, getAuthUser } from "@/lib/auth";
 
-const ALLOWED_ROLES = ["admin", "manufacturer"];
+const ALLOWED_ROLES = ["admin", "manufacturer", "distributor", "pharmacist"];
 
 // Standard columns returned for user queries
 const userColumns = {
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
       if (authUser.role === "admin") {
         // Admins see all users
         allUsers = await db.select(userColumns).from(usersTable);
-      } else {
+      } else if (authUser.role === "manufacturer") {
         // Manufacturers see: all active users + pending/rejected users who registered under them
         allUsers = await db
           .select(userColumns)
@@ -80,6 +80,12 @@ export async function GET(req: Request) {
               ),
             ),
           );
+      } else {
+        // Distributors see only active users (needed for transfer dialogs)
+        allUsers = await db
+          .select(userColumns)
+          .from(usersTable)
+          .where(eq(usersTable.status, "active"));
       }
 
       return NextResponse.json(allUsers);

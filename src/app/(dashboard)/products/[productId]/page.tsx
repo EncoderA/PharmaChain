@@ -330,17 +330,25 @@ export default function ProductDetailPage() {
     setSelectedWholesaler("");
     setTransferWholDialogOpen(true);
     try {
-      // Distributors don't have getMyWholesalers; use manufacturer's wholesalers
-      // Actually, the contract's getMyWholesalers is onlyManufacturer.
-      // For distributors, we need to fetch all active pharmacist users from DB.
+      // Fetch active wholesaler users from DB, scoped to manufacturer hierarchy
       const res = await fetch("/api/user");
       if (res.ok) {
-        const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string }[] = await res.json();
-        const pharmacists = dbUsers.filter(
-          (u) => u.role === "pharmacist" && u.status === "active" && u.walletId
+        const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string; manufacturerId: number | null }[] = await res.json();
+        let wholesalerList = dbUsers.filter(
+          (u) => u.role === "wholesaler" && u.status === "active" && u.walletId
         );
+
+        // Scope to wholesalers under the same manufacturer hierarchy
+        if (user?.manufacturerId) {
+          const scoped = wholesalerList.filter((u) => u.manufacturerId === user.manufacturerId);
+          if (scoped.length > 0) {
+            wholesalerList = scoped;
+          }
+          // If no scoped wholesalers found, fall back to showing all active wholesalers
+        }
+
         setWholesalers(
-          pharmacists.map((u) => ({
+          wholesalerList.map((u) => ({
             address: u.walletId,
             name: u.fullName,
             id: u.id,
@@ -538,12 +546,12 @@ export default function ProductDetailPage() {
               product.currentOwnerId === user.id && (
                 <Button variant="outline" onClick={openTransferWholDialog}>
                   <Send className="h-4 w-4 mr-2" />
-                  Transfer to Pharmacist
+                  Transfer to Wholesaler
                 </Button>
               )}
 
-            {/* Pharmacist/Wholesaler: Mark as Sold */}
-            {user?.role === "pharmacist" &&
+            {/* Wholesaler: Mark as Sold */}
+            {user?.role === "wholesaler" &&
               product.currentOwnerId === user.id && (
                 <Button
                   variant="outline"
@@ -884,7 +892,7 @@ export default function ProductDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Transfer to Wholesaler/Pharmacist Dialog */}
+      {/* Transfer to Wholesaler Dialog */}
       <Dialog open={transferWholDialogOpen} onOpenChange={(open) => {
         if (!open) {
           setTransferWholDialogOpen(false);
@@ -894,9 +902,9 @@ export default function ProductDetailPage() {
       }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Transfer to Pharmacist</DialogTitle>
+            <DialogTitle>Transfer to Wholesaler</DialogTitle>
             <DialogDescription>
-              Transfer &quot;{product.name}&quot; ({product.productCode}) to a registered pharmacist/wholesaler on-chain.
+              Transfer &quot;{product.name}&quot; ({product.productCode}) to a registered wholesaler on-chain.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
@@ -908,14 +916,14 @@ export default function ProductDetailPage() {
             )}
             {wholesalers.length === 0 && !transferWholError ? (
               <p className="text-sm text-muted-foreground">
-                No active pharmacists found. Ensure pharmacists are registered and approved first.
+                No active wholesalers found. Ensure wholesalers are registered and approved first.
               </p>
             ) : (
               <div>
-                <Label className="mb-1 block">Select Pharmacist</Label>
+                <Label className="mb-1 block">Select Wholesaler</Label>
                 <Select value={selectedWholesaler} onValueChange={setSelectedWholesaler}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose a pharmacist..." />
+                    <SelectValue placeholder="Choose a wholesaler..." />
                   </SelectTrigger>
                   <SelectContent>
                     {wholesalers.map((w) => (

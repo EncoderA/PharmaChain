@@ -27,7 +27,7 @@ interface PendingUser {
   fullName: string;
   email: string;
   phone: string;
-  role: "distributor" | "pharmacist";
+  role: "distributor" | "pharmacist" | "wholesaler";
   organization: string;
   walletId: string;
   status: "active" | "pending" | "rejected";
@@ -51,6 +51,7 @@ export function PendingRequests({
     const colors: Record<string, string> = {
       distributor: "bg-blue-500/10 text-blue-500",
       pharmacist: "bg-green-500/10 text-green-500",
+      wholesaler: "bg-purple-500/10 text-purple-500",
     };
     return colors[role] || "bg-gray-500/10 text-gray-500";
   };
@@ -77,6 +78,8 @@ export function PendingRequests({
       // Manufacturer calls addDistributor / addWholesaler which registers them under the caller
       if (user.role === "distributor") {
         await addDistributor(user.walletId);
+      } else if (user.role === "wholesaler") {
+        await addWholesaler(user.walletId);
       } else {
         // pharmacist maps to wholesaler on-chain
         await addWholesaler(user.walletId);
@@ -213,7 +216,9 @@ export function PendingRequests({
                         className={getRoleBadgeColor(user.role)}
                       >
                         {user.role === "pharmacist"
-                          ? "Pharmacist / Wholesaler"
+                          ? "Pharmacist"
+                          : user.role === "wholesaler"
+                          ? "Wholesaler"
                           : "Distributor"}
                       </Badge>
                     </div>

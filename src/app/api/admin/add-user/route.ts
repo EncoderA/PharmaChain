@@ -41,7 +41,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const validRoles = ["admin", "manufacturer", "distributor", "pharmacist"];
+    const validRoles = ["admin", "manufacturer", "distributor", "pharmacist", "wholesaler"];
     if (!validRoles.includes(body.role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }

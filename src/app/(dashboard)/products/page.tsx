@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ColumnDef } from "@tanstack/react-table";
 import {
   Search,
   Filter,
@@ -56,11 +55,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
-<<<<<<< HEAD
-import { DataTable } from "@/components/ui/data-table";
-=======
 import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
->>>>>>> 196c0ac (on-chain off-chain connection)
 
 interface Product {
   id: number;
@@ -130,12 +125,20 @@ export default function ProductsPage() {
   const [transferError, setTransferError] = useState<string | null>(null);
   const [distributors, setDistributors] = useState<{ address: string; name: string; id: number }[]>([]);
   const [selectedDistributor, setSelectedDistributor] = useState("");
+  // Transfer to Wholesaler state (for distributors)
+  const [transferWholDialogOpen, setTransferWholDialogOpen] = useState(false);
+  const [transferWholProduct, setTransferWholProduct] = useState<Product | null>(null);
+  const [transferWholLoading, setTransferWholLoading] = useState(false);
+  const [transferWholError, setTransferWholError] = useState<string | null>(null);
+  const [wholesalers, setWholesalers] = useState<{ address: string; name: string; id: number }[]>([]);
+  const [selectedWholesaler, setSelectedWholesaler] = useState("");
   const router = useRouter();
   const { user } = useUser();
   const {
     registerDrug,
     getDrugCounter,
     transferToDistributor,
+    transferToWholesaler,
     getMyDistributors,
   } = useSupplyChainContract();
 
@@ -292,97 +295,6 @@ export default function ProductsPage() {
 
   const canAddProducts = user?.role === "manufacturer" || user?.role === "admin";
 
-<<<<<<< HEAD
-  const columns: ColumnDef<Product>[] = [
-    {
-      accessorKey: "name",
-      header: "Product",
-      cell: ({ row }) => {
-        const product = row.original;
-        return (
-          <div>
-            <div className="font-medium">{product.name}</div>
-            <div className="text-xs text-muted-foreground">
-              {product.productCode}
-            </div>
-            {product.category && (
-              <div className="text-xs text-primary">{product.category}</div>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: "manufacturerName",
-      header: "Manufacturer",
-      cell: ({ row }) => (
-        <span className="text-sm">
-          {row.original.manufacturerName ?? "N/A"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "batch",
-      header: "Batch",
-      cell: ({ row }) => (
-        <span className="text-sm font-mono">
-          {row.original.batch ?? "N/A"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "stock",
-      header: "Stock",
-      cell: ({ row }) => {
-        const stockStatus = getStockStatus(row.original.stock);
-        return (
-          <div className="flex flex-col">
-            <span className="text-sm">{row.original.stock} units</span>
-            <span className={`text-xs ${stockStatus.className}`}>
-              {stockStatus.label}
-            </span>
-          </div>
-        );
-      },
-    },
-    {
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => getStatusBadge(row.original.status),
-    },
-    {
-      accessorKey: "updatedAt",
-      header: "Last Updated",
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {formatDate(row.original.updatedAt)}
-        </span>
-      ),
-    },
-    {
-      id: "actions",
-      header: "View Details",
-      cell: ({ row }) => (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => handleViewDetails(row.original, e)}
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>View Details</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ),
-    },
-  ];
-=======
   // Load distributors under this manufacturer when transfer dialog opens
   const openTransferDialog = async (product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -496,7 +408,127 @@ export default function ProductsPage() {
       setTransferLoading(false);
     }
   };
->>>>>>> 196c0ac (on-chain off-chain connection)
+
+  // Load wholesalers when distributor opens transfer-to-wholesaler dialog
+  const openTransferWholDialog = async (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTransferWholProduct(product);
+    setTransferWholError(null);
+    setSelectedWholesaler("");
+    setTransferWholDialogOpen(true);
+
+    try {
+      // Fetch active wholesalers from DB, scoped to same manufacturer hierarchy if possible
+      const res = await fetch("/api/user");
+      if (res.ok) {
+        const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string; manufacturerId: number | null }[] = await res.json();
+        let wholesalerList = dbUsers.filter(
+          (u) => u.role === "wholesaler" && u.status === "active" && u.walletId
+        );
+
+        // If distributor has a manufacturerId, scope wholesalers to same manufacturer
+        if (user?.manufacturerId) {
+          const scoped = wholesalerList.filter((u) => u.manufacturerId === user.manufacturerId);
+          if (scoped.length > 0) {
+            wholesalerList = scoped;
+          }
+          // If no scoped wholesalers found, fall back to showing all active wholesalers
+        }
+
+        setWholesalers(
+          wholesalerList.map((u) => ({
+            address: u.walletId,
+            name: u.fullName,
+            id: u.id,
+          }))
+        );
+      }
+    } catch {
+      setWholesalers([]);
+    }
+  };
+
+  /** Transfer to Wholesaler on-chain + DB (distributor action) */
+  const handleTransferToWholesaler = async () => {
+    if (!transferWholProduct || !selectedWholesaler) return;
+    setTransferWholLoading(true);
+    setTransferWholError(null);
+
+    try {
+      const wholesaler = wholesalers.find((w) => w.address === selectedWholesaler);
+      if (!wholesaler) throw new Error("Select a wholesaler");
+
+      if (!transferWholProduct.blockchainHash) {
+        throw new Error("This product was not registered on-chain. Cannot transfer.");
+      }
+
+      // Use stored on-chain drug ID if available, otherwise scan the chain
+      let onChainDrugId: number | null = transferWholProduct.onChainDrugId ?? null;
+
+      if (onChainDrugId === null) {
+        const { getSupplyChainContract } = await import("@/blockchain/contract");
+        const contract = await getSupplyChainContract();
+        const counter = await contract.drugCounter();
+
+        for (let i = Number(counter); i >= 1; i--) {
+          const drug = await contract.getDrugDetails(i);
+          if (
+            drug.name === transferWholProduct.name &&
+            Number(drug.stage) === 1 && // Distributed stage
+            !drug.isRejected
+          ) {
+            onChainDrugId = i;
+            break;
+          }
+        }
+      }
+
+      if (onChainDrugId === null) {
+        throw new Error("Could not find this drug on-chain in Distributed stage.");
+      }
+
+      // Step 1: Transfer on-chain (transferToWholesaler)
+      const { txHash, blockNumber } = await transferToWholesaler(onChainDrugId, wholesaler.address);
+
+      // Step 2: Update product in DB — change currentOwnerId
+      await fetch(`/api/products/${transferWholProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentOwnerId: wholesaler.id || undefined,
+          status: "Verified",
+        }),
+      });
+
+      // Step 3: Record transaction
+      await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: transferWholProduct.id,
+          action: "Wholesaled",
+          fromUserId: user?.id,
+          toUserId: wholesaler.id || undefined,
+          txHash,
+          blockNumber,
+          status: "Confirmed",
+        }),
+      });
+
+      setTransferWholDialogOpen(false);
+      setTransferWholProduct(null);
+      fetchProducts();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setTransferWholError("MetaMask transaction was rejected.");
+      } else {
+        setTransferWholError(message);
+      }
+    } finally {
+      setTransferWholLoading(false);
+    }
+  };
 
   return (
     <div className="flex-1 p-6 bg-background text-foreground space-y-6">
@@ -680,10 +712,6 @@ export default function ProductsPage() {
             {filteredProducts.length !== 1 ? "s" : ""} found
           </CardDescription>
         </CardHeader>
-<<<<<<< HEAD
-        <CardContent>
-          {loading ? (
-=======
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full table-auto border-collapse">
@@ -800,6 +828,27 @@ export default function ProductsPage() {
                                   </Tooltip>
                                 </TooltipProvider>
                               )}
+                            {/* Transfer to Wholesaler — distributor only, products they own */}
+                            {user?.role === "distributor" &&
+                              product.status === "Verified" &&
+                              product.currentOwnerId === user.id && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => openTransferWholDialog(product, e)}
+                                      >
+                                        <Send className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Transfer to Wholesaler</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
                           </div>
                         </td>
                       </tr>
@@ -811,16 +860,9 @@ export default function ProductsPage() {
           </div>
 
           {!loading && filteredProducts.length === 0 && (
->>>>>>> 196c0ac (on-chain off-chain connection)
             <div className="text-center py-8 text-muted-foreground">
-              Loading products...
+              No products found matching your criteria.
             </div>
-          ) : (
-            <DataTable
-              columns={columns}
-              data={filteredProducts}
-              onRowClick={(product) => router.push(`/products/${product.id}`)}
-            />
           )}
         </CardContent>
       </Card>
@@ -999,6 +1041,94 @@ export default function ProductsPage() {
                   disabled={transferLoading || !selectedDistributor}
                 >
                   {transferLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Transferring on-chain...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Transfer
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer to Wholesaler Dialog (for distributors) */}
+      <Dialog open={transferWholDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setTransferWholDialogOpen(false);
+          setTransferWholProduct(null);
+          setTransferWholError(null);
+          setSelectedWholesaler("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transfer to Wholesaler</DialogTitle>
+            <DialogDescription>
+              {transferWholProduct
+                ? `Transfer "${transferWholProduct.name}" (${transferWholProduct.productCode}) to a registered wholesaler on-chain.`
+                : "Select a wholesaler to transfer this product to."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {transferWholError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{transferWholError}</AlertDescription>
+              </Alert>
+            )}
+
+            {wholesalers.length === 0 && !transferWholError ? (
+              <p className="text-sm text-muted-foreground">
+                No active wholesalers found. Ensure wholesalers are registered and approved first.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label className="mb-1 block">Select Wholesaler</Label>
+                  <Select value={selectedWholesaler} onValueChange={setSelectedWholesaler}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a wholesaler..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {wholesalers.map((w) => (
+                        <SelectItem key={w.address} value={w.address}>
+                          {w.name} ({w.address.slice(0, 6)}...{w.address.slice(-4)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This will call transferToWholesaler on-chain via MetaMask and update the database.
+                </p>
+              </>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setTransferWholDialogOpen(false);
+                  setTransferWholProduct(null);
+                }}
+                disabled={transferWholLoading}
+              >
+                Cancel
+              </Button>
+              {wholesalers.length > 0 && (
+                <Button
+                  onClick={handleTransferToWholesaler}
+                  disabled={transferWholLoading || !selectedWholesaler}
+                >
+                  {transferWholLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Transferring on-chain...

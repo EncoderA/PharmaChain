@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PendingRequests } from "@/components/users/pending-requests";
-import { Users as UsersIcon, UserCheck, UserX, Clock, Truck, Building2 } from "lucide-react";
+import { Users as UsersIcon, UserCheck, UserX, Clock, Truck, Building2, Store } from "lucide-react";
 import { UserFiltersClient } from "@/components/users/user-filters-client";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,19 +18,16 @@ import { AlertCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useUser } from "@/contexts/user-context";
-<<<<<<< HEAD
 import axios from "axios";
-=======
 import { AddUserDialog } from "@/components/admin/add-user-dialog";
 import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
->>>>>>> 196c0ac (on-chain off-chain connection)
 
 interface User {
   id: number;
   fullName: string;
   email: string;
   phone: string;
-  role: "manufacturer" | "distributor" | "pharmacist" | "admin";
+  role: "manufacturer" | "distributor" | "pharmacist" | "wholesaler" | "admin";
   organization: string;
   walletId: string;
   status: "active" | "pending" | "rejected";
@@ -68,7 +65,7 @@ const UsersPage = () => {
     }
   }, [currentUser, userLoading, router]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -92,7 +89,7 @@ const UsersPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Fetch users only when authorized
   useEffect(() => {
@@ -195,6 +192,14 @@ const UsersPage = () => {
         .length.toString(),
       icon: Clock,
       color: "text-orange-500",
+    },
+    {
+      title: "Wholesalers",
+      value: activeUsers
+        .filter((u) => u.role === "wholesaler")
+        .length.toString(),
+      icon: Store,
+      color: "text-purple-500",
     },
     {
       title: "Pharmacists",
@@ -309,15 +314,15 @@ const UsersPage = () => {
                 </CardContent>
               </Card>
 
-              {/* My Wholesalers / Pharmacists */}
+              {/* My Wholesalers */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Building2 className="h-5 w-5 text-purple-500" />
-                    My Pharmacists
+                    My Wholesalers
                   </CardTitle>
                   <CardDescription>
-                    Pharmacists (wholesalers) registered under your account on-chain
+                    Wholesalers registered under your account on-chain
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -328,7 +333,7 @@ const UsersPage = () => {
                     </div>
                   ) : myWholesalers.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4">
-                      No pharmacists registered yet. Approve pending pharmacist requests to add them.
+                      No wholesalers registered yet. Approve pending wholesaler requests to add them.
                     </p>
                   ) : (
                     <div className="space-y-3">
@@ -370,7 +375,7 @@ const UsersPage = () => {
           </Card>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             {stats.map((stat) => {
               const Icon = stat.icon;
               return (
