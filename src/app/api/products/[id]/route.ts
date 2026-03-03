@@ -33,6 +33,7 @@ export async function GET(
         status: productsTable.status,
         manufacturerId: productsTable.manufacturerId,
         currentOwnerId: productsTable.currentOwnerId,
+        onChainDrugId: productsTable.onChainDrugId,
         manufacturingDate: productsTable.manufacturingDate,
         expiryDate: productsTable.expiryDate,
         blockchainHash: productsTable.blockchainHash,
@@ -101,6 +102,7 @@ export async function PUT(
     if (body.currentOwnerId !== undefined) updateData.currentOwnerId = body.currentOwnerId;
     if (body.blockchainHash !== undefined) updateData.blockchainHash = body.blockchainHash;
     if (body.expiryDate !== undefined) updateData.expiryDate = new Date(body.expiryDate);
+    if (body.onChainDrugId !== undefined) updateData.onChainDrugId = body.onChainDrugId;
     if (body.manufacturingDate !== undefined) updateData.manufacturingDate = new Date(body.manufacturingDate);
 
     const [updated] = await db

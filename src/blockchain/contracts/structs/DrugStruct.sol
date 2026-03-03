@@ -17,7 +17,5 @@ struct Drug {
     Stage stage;
     bool isRejected;
     string name;
-    string customerName;
-    bytes32 qrHash;
+    bytes32 qrHash;   // 🔥 Auto-generated
 }
-

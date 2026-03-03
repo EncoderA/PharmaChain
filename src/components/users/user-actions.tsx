@@ -19,23 +19,73 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MoreHorizontal, Trash2, Loader2 } from "lucide-react";
+import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
 interface UserActionsProps {
   userId: number | string;
   userName?: string;
+  userRole?: string;
+  walletId?: string;
   onDelete?: () => void;
 }
 
-export function UserActions({ userId, userName, onDelete }: UserActionsProps) {
+export function UserActions({ userId, userName, userRole, walletId, onDelete }: UserActionsProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const {
+    removeAdmin,
+    removeManufacturer,
+    removeDistributor,
+    removeWholesaler,
+  } = useSupplyChainContract();
+
+  /**
+   * Call the role-specific on-chain removal function.
+   * - admin       → removeAdmin(address)
+   * - manufacturer → removeManufacturer(address)
+   * - distributor  → removeDistributor(address)
+   * - pharmacist   → removeWholesaler(address)  (pharmacist = wholesaler on-chain)
+   */
+  const removeOnChain = async (address: string, role: string) => {
+    switch (role) {
+      case "admin":
+        return removeAdmin(address);
+      case "manufacturer":
+        return removeManufacturer(address);
+      case "distributor":
+        return removeDistributor(address);
+      case "pharmacist":
+        return removeWholesaler(address);
+      default:
+        throw new Error(`Unknown role: ${role}`);
+    }
+  };
 
   const handleDelete = async () => {
     try {
       setDeleting(true);
       setError(null);
 
+      // Step 1: Remove participant on-chain if they have a wallet
+      if (walletId && userRole) {
+        try {
+          await removeOnChain(walletId, userRole);
+        } catch (chainErr) {
+          const msg = chainErr instanceof Error ? chainErr.message : "";
+          // If MetaMask rejected, stop here
+          if (msg.includes("user rejected") || msg.includes("ACTION_REJECTED")) {
+            setError("MetaMask transaction was rejected. The user was not removed.");
+            return;
+          }
+          // If "NotRegistered" error, the participant may not be on-chain — continue with DB deletion
+          if (!msg.includes("NotRegistered") && !msg.includes("NR")) {
+            console.warn("On-chain removal failed (continuing with DB deletion):", msg);
+          }
+        }
+      }
+
+      // Step 2: Delete from database
       const response = await fetch(`/api/user/${userId}`, {
         method: "DELETE",
       });
@@ -89,7 +139,7 @@ export function UserActions({ userId, userName, onDelete }: UserActionsProps) {
               ) : (
                 "this user"
               )}
-              ? This action cannot be undone.
+              ? This will remove them from the blockchain and database. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -110,7 +160,7 @@ export function UserActions({ userId, userName, onDelete }: UserActionsProps) {
               {deleting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
+                  Removing...
                 </>
               ) : (
                 "Delete"

@@ -132,7 +132,80 @@ export function UserFiltersClient({ users }: UserFiltersClientProps) {
         Showing {filteredUsers.length} of {users.length} users
       </div>
 
+<<<<<<< HEAD
       <DataTable columns={columns} data={filteredUsers} />
+=======
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Organization</TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Wallet ID</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredUsers.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="text-center py-8 text-muted-foreground"
+                >
+                  No users found matching your criteria
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredUsers.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                          {getInitials(user.fullName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium text-sm">
+                          {user.fullName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {user.email}
+                        </div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={getRoleBadgeColor(user.role)}
+                    >
+                      {user.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm">{user.organization}</TableCell>
+                  <TableCell className="text-sm">{user.phone}</TableCell>
+                  <TableCell className="text-sm break-all">
+                    {user.walletId}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <UserActions
+                      userId={user.id}
+                      userName={user.fullName}
+                      userRole={user.role}
+                      walletId={user.walletId}
+                      onDelete={onDelete}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+>>>>>>> 196c0ac (on-chain off-chain connection)
     </div>
   );
 }

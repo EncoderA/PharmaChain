@@ -15,15 +15,16 @@ export async function POST(req: Request) {
       !body.password ||
       !body.role ||
       !body.organization ||
-      !body.phone
+      !body.phone ||
+      !body.walletId
     ) {
       return NextResponse.json(
-        { error: "All fields are required" },
+        { error: "All fields are required (including wallet address)" },
         { status: 400 },
       );
     }
 
-    // Validate role — admin registration is not allowed
+    // Validate role — admin registration is not allowed via public signup
     const validRoles = ["manufacturer", "distributor", "pharmacist"];
     if (!validRoles.includes(body.role)) {
       return NextResponse.json(
@@ -32,17 +33,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Distributors and pharmacists must provide a wallet address and select a manufacturer
+    // Distributors and pharmacists must select a manufacturer
     const needsManufacturer = body.role === "distributor" || body.role === "pharmacist";
 
     if (needsManufacturer) {
-      if (!body.walletId) {
-        return NextResponse.json(
-          { error: "Wallet address is required for distributors and pharmacists" },
-          { status: 400 },
-        );
-      }
-
       if (!body.manufacturerId) {
         return NextResponse.json(
           { error: "You must select a manufacturer" },
@@ -91,25 +85,25 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if wallet already exists (if provided)
-    if (body.walletId) {
-      const existingByWallet = await db
-        .select()
-        .from(usersTable)
-        .where(eq(usersTable.walletId, body.walletId));
+    // Check if wallet already exists
+    const existingByWallet = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.walletId, body.walletId));
 
-      if (existingByWallet.length > 0) {
-        return NextResponse.json(
-          { error: "An account with this wallet address already exists" },
-          { status: 409 },
-        );
-      }
+    if (existingByWallet.length > 0) {
+      return NextResponse.json(
+        { error: "An account with this wallet address already exists" },
+        { status: 409 },
+      );
     }
 
     // Hash password
     const hashedPassword = await hashPassword(body.password);
 
     // Determine status: manufacturers are active immediately, others need approval
+    // (On-chain: manufacturer already self-registered via MetaMask,
+    //  distributor/wholesaler already sent on-chain request from the client)
     const status = body.role === "manufacturer" ? "active" : "pending";
 
     // Create user
@@ -122,7 +116,7 @@ export async function POST(req: Request) {
         role: body.role,
         organization: body.organization,
         phone: body.phone,
-        walletId: body.walletId || "",
+        walletId: body.walletId,
         status,
         manufacturerId: needsManufacturer ? Number(body.manufacturerId) : null,
       })
@@ -158,7 +152,7 @@ export async function POST(req: Request) {
         user,
         pending: true,
         message:
-          "Registration submitted successfully. Your account is pending approval from the manufacturer.",
+          "Registration submitted successfully. Your on-chain request has been sent and your account is pending approval from the manufacturer.",
       },
       { status: 201 },
     );

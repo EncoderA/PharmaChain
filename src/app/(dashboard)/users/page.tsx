@@ -10,14 +10,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PendingRequests } from "@/components/users/pending-requests";
-import { Users as UsersIcon, UserCheck, UserX, Clock } from "lucide-react";
+import { Users as UsersIcon, UserCheck, UserX, Clock, Truck, Building2 } from "lucide-react";
 import { UserFiltersClient } from "@/components/users/user-filters-client";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useUser } from "@/contexts/user-context";
+<<<<<<< HEAD
 import axios from "axios";
+=======
+import { AddUserDialog } from "@/components/admin/add-user-dialog";
+import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
+>>>>>>> 196c0ac (on-chain off-chain connection)
 
 interface User {
   id: number;
@@ -39,6 +45,12 @@ const UsersPage = () => {
   const [error, setError] = useState<string | null>(null);
   const { user: currentUser, isLoading: userLoading } = useUser();
   const router = useRouter();
+  const { getMyDistributors, getMyWholesalers } = useSupplyChainContract();
+
+  // My on-chain participants (manufacturer only)
+  const [myDistributors, setMyDistributors] = useState<{ address: string; name: string; organization: string }[]>([]);
+  const [myWholesalers, setMyWholesalers] = useState<{ address: string; name: string; organization: string }[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
 
   const isAuthorized =
     !userLoading &&
@@ -88,6 +100,46 @@ const UsersPage = () => {
       fetchUsers();
     }
   }, [isAuthorized, fetchUsers]);
+
+  // Fetch on-chain participants for manufacturers
+  useEffect(() => {
+    if (!isAuthorized || currentUser?.role !== "manufacturer") return;
+
+    const fetchMyParticipants = async () => {
+      setParticipantsLoading(true);
+      try {
+        const [distAddresses, wholAddresses] = await Promise.all([
+          getMyDistributors(),
+          getMyWholesalers(),
+        ]);
+
+        // Match addresses with DB users for display names
+        const res = await fetch("/api/user");
+        const dbUsers: { fullName: string; walletId: string; organization: string; status: string }[] =
+          res.ok ? await res.json() : [];
+
+        const matchAddr = (addr: string) => {
+          const u = dbUsers.find(
+            (u) => u.walletId.toLowerCase() === addr.toLowerCase() && u.status === "active"
+          );
+          return {
+            address: addr,
+            name: u?.fullName ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+            organization: u?.organization ?? "Unknown",
+          };
+        };
+
+        setMyDistributors(distAddresses.map(matchAddr));
+        setMyWholesalers(wholAddresses.map(matchAddr));
+      } catch (err) {
+        console.error("Failed to fetch on-chain participants:", err);
+      } finally {
+        setParticipantsLoading(false);
+      }
+    };
+
+    fetchMyParticipants();
+  }, [isAuthorized, currentUser?.role, getMyDistributors, getMyWholesalers]);
 
   const handleRetry = () => {
     fetchUsers();
@@ -164,6 +216,9 @@ const UsersPage = () => {
             Manage supply chain network users and approvals
           </p>
         </div>
+        {currentUser.role === "admin" && (
+          <AddUserDialog onUserAdded={fetchUsers} />
+        )}
       </div>
 
       {/* Error Alert */}
@@ -206,6 +261,99 @@ const UsersPage = () => {
                 onStatusChanged={handleStatusChanged}
               />
             )}
+
+          {/* My On-Chain Participants — manufacturer only */}
+          {currentUser.role === "manufacturer" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* My Distributors */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Truck className="h-5 w-5 text-blue-500" />
+                    My Distributors
+                  </CardTitle>
+                  <CardDescription>
+                    Distributors registered under your account on-chain
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {participantsLoading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground py-4">
+                      <Spinner className="h-4 w-4" />
+                      Loading...
+                    </div>
+                  ) : myDistributors.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4">
+                      No distributors registered yet. Approve pending distributor requests to add them.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {myDistributors.map((d) => (
+                        <div
+                          key={d.address}
+                          className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                        >
+                          <div>
+                            <p className="font-medium text-sm">{d.name}</p>
+                            <p className="text-xs text-muted-foreground">{d.organization}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="font-mono text-xs">
+                              {d.address.slice(0, 6)}...{d.address.slice(-4)}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* My Wholesalers / Pharmacists */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5 text-purple-500" />
+                    My Pharmacists
+                  </CardTitle>
+                  <CardDescription>
+                    Pharmacists (wholesalers) registered under your account on-chain
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {participantsLoading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground py-4">
+                      <Spinner className="h-4 w-4" />
+                      Loading...
+                    </div>
+                  ) : myWholesalers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4">
+                      No pharmacists registered yet. Approve pending pharmacist requests to add them.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {myWholesalers.map((w) => (
+                        <div
+                          key={w.address}
+                          className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                        >
+                          <div>
+                            <p className="font-medium text-sm">{w.name}</p>
+                            <p className="text-xs text-muted-foreground">{w.organization}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="font-mono text-xs">
+                              {w.address.slice(0, 6)}...{w.address.slice(-4)}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Active Users List */}
           <Card>

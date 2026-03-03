@@ -61,6 +61,7 @@ export const productsTable = pgTable("products", {
   status: productStatusEnum("status").default("Pending").notNull(),
   manufacturerId: integer("manufacturer_id").references(() => usersTable.id),
   currentOwnerId: integer("current_owner_id").references(() => usersTable.id),
+  onChainDrugId: integer("on_chain_drug_id"),
   manufacturingDate: timestamp("manufacturing_date"),
   expiryDate: timestamp("expiry_date"),
   blockchainHash: varchar("blockchain_hash", { length: 255 }),

@@ -3,15 +3,32 @@ pragma solidity ^0.8.19;
 
 contract Roles {
 
+    /* ================= ROLE MAPPINGS ================= */
+
+    mapping(address => bool) internal admins;
     mapping(address => bool) internal manufacturers;
     mapping(address => bool) internal distributors;
     mapping(address => bool) internal wholesalers;
-    mapping(address => bool) internal admins;
 
+    /* ================= ROLE LISTS ================= */
+
+    address[] internal adminList;
     address[] internal manufacturerList;
     address[] internal distributorList;
     address[] internal wholesalerList;
-    address[] internal adminList;
+
+    /* ================= HIERARCHY ================= */
+
+    mapping(address => address) internal registeredUnder;
+    mapping(address => address[]) internal manufacturerDistributors;
+    mapping(address => address[]) internal manufacturerWholesalers;
+
+    /* ================= MODIFIERS ================= */
+
+    modifier onlyAdmin() {
+        require(admins[msg.sender], "NA");
+        _;
+    }
 
     modifier onlyManufacturer() {
         require(manufacturers[msg.sender], "NM");
@@ -27,11 +44,4 @@ contract Roles {
         require(wholesalers[msg.sender], "NW");
         _;
     }
-
-    modifier onlyAdmin() {
-        require(admins[msg.sender], "NA");
-        _;
-    }
-
-    
 }

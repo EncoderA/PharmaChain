@@ -23,11 +23,13 @@ import { Spinner } from "@/components/ui/spinner";
 import { useUser } from "@/contexts/user-context";
 import { CheckCircle2 } from "lucide-react";
 import axios from "axios";
+import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
 interface Manufacturer {
   id: number;
   fullName: string;
   organization: string;
+  walletId: string;
 }
 
 export function RegisterForm() {
@@ -40,6 +42,7 @@ export function RegisterForm() {
   const [pendingSuccess, setPendingSuccess] = useState(false);
   const router = useRouter();
   const { refreshUser } = useUser();
+  const { registerAsManufacturer } = useSupplyChainContract();
 
   const needsManufacturer = role === "distributor" || role === "pharmacist";
 
@@ -75,7 +78,7 @@ export function RegisterForm() {
       role,
       organization: formData.get("organization") as string,
       phone: formData.get("phone") as string,
-      walletId: (formData.get("walletId") as string) || "",
+      walletId: formData.get("walletId") as string,
     };
 
     if (needsManufacturer) {
@@ -89,8 +92,8 @@ export function RegisterForm() {
       return;
     }
 
-    if (needsManufacturer && !data.walletId) {
-      setError("Wallet address is required for distributors and pharmacists");
+    if (!data.walletId) {
+      setError("Wallet address is required");
       setLoading(false);
       return;
     }
@@ -115,6 +118,14 @@ export function RegisterForm() {
     }
 
     try {
+      // Step 1: On-chain registration via MetaMask (manufacturers only)
+      if (role === "manufacturer") {
+        await registerAsManufacturer();
+      }
+      // Distributors/Pharmacists are registered on-chain later when the manufacturer approves them.
+      // At this point they only create an off-chain pending record.
+
+      // Step 2: Save off-chain details to database
       const res = await axios.post("/api/auth/register", data);
 
       // If user is pending approval, show success message instead of redirecting
@@ -127,9 +138,15 @@ export function RegisterForm() {
       await refreshUser();
       router.push("/dashboard");
     } catch (err: any) {
-      setError(
-        err?.response?.data?.error || err?.message || "Registration failed. Please try again."
-      );
+      // Handle MetaMask rejection clearly
+      const message = err?.message || "";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setError("MetaMask transaction was rejected. Registration was not completed.");
+      } else {
+        setError(
+          err?.response?.data?.error || message || "Registration failed. Please try again."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -146,9 +163,9 @@ export function RegisterForm() {
             </div>
             <CardTitle className="text-xl">Registration Submitted</CardTitle>
             <CardDescription className="text-base mt-2">
-              Your account has been created and is pending approval from the
-              manufacturer. You will be able to log in once your account is
-              approved.
+              Your registration request has been submitted on-chain and is
+              pending approval from the manufacturer. You will be able to log in
+              once your account is approved.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -303,22 +320,25 @@ export function RegisterForm() {
                 />
               </div>
 
-              {/* Wallet Address */}
+              {/* Wallet Address — required for all roles */}
               <div className="grid gap-2">
                 <Label htmlFor="walletId">
                   Wallet Address
-                  {needsManufacturer ? (
-                    <span className="text-destructive text-xs ml-1">*</span>
-                  ) : (
-                    <span className="text-muted-foreground text-xs ml-1">(optional)</span>
-                  )}
+                  <span className="text-destructive text-xs ml-1">*</span>
                 </Label>
                 <Input
                   id="walletId"
                   name="walletId"
                   placeholder="0x..."
-                  required={needsManufacturer}
+                  required
                 />
+                <p className="text-xs text-muted-foreground">
+                  {role === "manufacturer"
+                    ? "Your wallet will be registered on-chain via MetaMask."
+                    : needsManufacturer
+                    ? "Your wallet will be registered on-chain when the manufacturer approves your request."
+                    : "Connect your MetaMask wallet to get your address."}
+                </p>
               </div>
 
               <Button type="submit" className="w-full cursor-pointer" disabled={loading}>

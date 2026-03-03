@@ -12,8 +12,29 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { CheckIcon, PlusIcon, QrCode, ShoppingCart, Verified, WarehouseIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  CheckIcon,
+  PlusIcon,
+  QrCode,
+  ShoppingCart,
+  Verified,
+  WarehouseIcon,
+  Loader2,
+  AlertCircle,
+  Factory,
+  Truck,
+  Building2,
+  Store,
+  XCircle,
+  CheckCircle,
+  ArrowRight,
+} from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import Calendar27 from "./BarChart";
+import { useSupplyChainContract, Stage } from "@/hooks/use-supply-chain-contract";
+import type { DrugStruct } from "@/hooks/use-supply-chain-contract";
 
 interface DashboardStats {
   products: {
@@ -38,9 +59,59 @@ interface DashboardStats {
   };
 }
 
+interface JourneyStep {
+  address: string;
+  name: string;
+}
+
+const stageLabels: Record<number, string> = {
+  [Stage.Manufactured]: "Manufactured",
+  [Stage.Distributed]: "Distributed",
+  [Stage.Wholesaled]: "Wholesaled",
+  [Stage.Sold]: "Sold",
+};
+
+const stageIcons: Record<number, typeof Factory> = {
+  [Stage.Manufactured]: Factory,
+  [Stage.Distributed]: Truck,
+  [Stage.Wholesaled]: Building2,
+  [Stage.Sold]: Store,
+};
+
 export default function SupplyChainDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Track Product state
+  const [trackOpen, setTrackOpen] = useState(false);
+  const [trackId, setTrackId] = useState("");
+  const [trackLoading, setTrackLoading] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
+  const [trackResult, setTrackResult] = useState<{
+    drug: DrugStruct;
+    journey: JourneyStep[];
+  } | null>(null);
+
+  // Verify Authenticity state
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [verifyDrugId, setVerifyDrugId] = useState("");
+  const [verifyQrHash, setVerifyQrHash] = useState("");
+  const [verifyFetchingHash, setVerifyFetchingHash] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [verifyResult, setVerifyResult] = useState<{
+    isAuthentic: boolean;
+    isExpired: boolean;
+    isRejected: boolean;
+    stage: Stage;
+    currentOwner: string;
+    ownerName: string;
+    qrHash: string;
+    drugName: string;
+  } | null>(null);
+
+  const { getDrugDetails, getDrugJourney, verifyDrugByQR } =
+    useSupplyChainContract();
 
   useEffect(() => {
     async function fetchStats() {
@@ -58,6 +129,179 @@ export default function SupplyChainDashboard() {
     }
     fetchStats();
   }, []);
+
+  /** Auto-fetch QR hash when drug ID changes in the Verify dialog */
+  useEffect(() => {
+    const drugId = parseInt(verifyDrugId);
+    if (isNaN(drugId) || drugId < 1) {
+      setVerifyQrHash("");
+      return;
+    }
+
+    let cancelled = false;
+    const fetchHash = async () => {
+      setVerifyFetchingHash(true);
+      setVerifyError(null);
+      try {
+        const drug = await getDrugDetails(drugId);
+        if (!cancelled) {
+          setVerifyQrHash(drug.qrHash);
+        }
+      } catch {
+        if (!cancelled) {
+          setVerifyQrHash("");
+        }
+      } finally {
+        if (!cancelled) {
+          setVerifyFetchingHash(false);
+        }
+      }
+    };
+
+    const debounce = setTimeout(fetchHash, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+    };
+  }, [verifyDrugId, getDrugDetails]);
+
+  /** Resolve wallet addresses to user names from the database */
+  const resolveAddresses = async (
+    addresses: string[]
+  ): Promise<Map<string, string>> => {
+    const map = new Map<string, string>();
+    try {
+      const res = await fetch("/api/user");
+      if (res.ok) {
+        const users: {
+          fullName: string;
+          walletId: string;
+          organization: string;
+        }[] = await res.json();
+        for (const addr of addresses) {
+          const user = users.find(
+            (u) => u.walletId.toLowerCase() === addr.toLowerCase()
+          );
+          map.set(
+            addr.toLowerCase(),
+            user
+              ? `${user.fullName} (${user.organization})`
+              : addr === "0x0000000000000000000000000000000000000000"
+                ? "Sold to Customer"
+                : `${addr.slice(0, 6)}...${addr.slice(-4)}`
+          );
+        }
+      }
+    } catch {
+      // fallback: just show truncated addresses
+      for (const addr of addresses) {
+        if (!map.has(addr.toLowerCase())) {
+          map.set(
+            addr.toLowerCase(),
+            `${addr.slice(0, 6)}...${addr.slice(-4)}`
+          );
+        }
+      }
+    }
+    return map;
+  };
+
+  /** Handle Track Product form submission */
+  const handleTrackProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTrackError(null);
+    setTrackResult(null);
+
+    const drugId = parseInt(trackId);
+    if (isNaN(drugId) || drugId < 1) {
+      setTrackError("Please enter a valid on-chain drug ID (positive number).");
+      return;
+    }
+
+    setTrackLoading(true);
+    try {
+      const [drug, journeyAddresses] = await Promise.all([
+        getDrugDetails(drugId),
+        getDrugJourney(drugId),
+      ]);
+
+      // Resolve addresses to names
+      const nameMap = await resolveAddresses(journeyAddresses);
+      const journey: JourneyStep[] = journeyAddresses.map((addr) => ({
+        address: addr,
+        name: nameMap.get(addr.toLowerCase()) ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+      }));
+
+      setTrackResult({ drug, journey });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setTrackError("MetaMask transaction was rejected.");
+      } else {
+        setTrackError(message);
+      }
+    } finally {
+      setTrackLoading(false);
+    }
+  };
+
+  /** Handle Verify Authenticity form submission */
+  const handleVerifyProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVerifyError(null);
+    setVerifyResult(null);
+
+    const drugId = parseInt(verifyDrugId);
+    if (isNaN(drugId) || drugId < 1) {
+      setVerifyError("Please enter a valid on-chain drug ID (positive number).");
+      return;
+    }
+
+    if (!verifyQrHash.trim()) {
+      setVerifyError("Please enter the QR hash to verify.");
+      return;
+    }
+
+    setVerifyLoading(true);
+    try {
+      // Fetch drug details for name + qrHash, and verify in parallel
+      const [result, drug] = await Promise.all([
+        verifyDrugByQR(drugId, verifyQrHash.trim()),
+        getDrugDetails(drugId),
+      ]);
+
+      // Resolve owner name
+      const nameMap = await resolveAddresses([result.currentOwner]);
+      const ownerName =
+        nameMap.get(result.currentOwner.toLowerCase()) ??
+        `${result.currentOwner.slice(0, 6)}...${result.currentOwner.slice(-4)}`;
+
+      setVerifyResult({
+        ...result,
+        ownerName,
+        qrHash: drug.qrHash,
+        drugName: drug.name,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setVerifyError("MetaMask transaction was rejected.");
+      } else {
+        setVerifyError(message);
+      }
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const formatTimestamp = (ts: bigint) => {
+    const date = new Date(Number(ts) * 1000);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
 
   const statCards = [
     {
@@ -112,9 +356,18 @@ export default function SupplyChainDashboard() {
     <div className="flex-1 bg-background">
       <div className="p-6 space-y-6">
         <div className="flex items-center gap-4 flex-wrap">
-          
-
-          <Dialog>
+          {/* Track Product Dialog */}
+          <Dialog
+            open={trackOpen}
+            onOpenChange={(open) => {
+              setTrackOpen(open);
+              if (!open) {
+                setTrackId("");
+                setTrackError(null);
+                setTrackResult(null);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button
                 variant="secondary"
@@ -124,26 +377,183 @@ export default function SupplyChainDashboard() {
                 Track Product
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Track Product</DialogTitle>
                 <DialogDescription>
-                  Enter the product or tracking ID to view its journey.
+                  Enter the on-chain drug ID to view its details and journey
+                  through the supply chain.
                 </DialogDescription>
               </DialogHeader>
-              <form className="space-y-4 mt-4">
+              <form onSubmit={handleTrackProduct} className="space-y-4 mt-4">
+                {trackError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{trackError}</AlertDescription>
+                  </Alert>
+                )}
                 <div>
-                  <Label className="mb-1 block">Tracking ID</Label>
-                  <Input placeholder="Enter tracking ID" />
+                  <Label className="mb-1 block">On-Chain Drug ID</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 1, 2, 3..."
+                    value={trackId}
+                    onChange={(e) => setTrackId(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit">Track</Button>
+                  <Button type="submit" disabled={trackLoading}>
+                    {trackLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Tracking...
+                      </>
+                    ) : (
+                      "Track"
+                    )}
+                  </Button>
                 </div>
               </form>
+
+              {/* Track Results */}
+              {trackResult && (
+                <div className="space-y-4 mt-2 border-t pt-4">
+                  {/* Drug Details */}
+                  <div>
+                    <h4 className="font-semibold text-sm mb-3">Drug Details</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Name:</span>
+                        <p className="font-medium">{trackResult.drug.name}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Drug ID:</span>
+                        <p className="font-mono font-medium">
+                          #{Number(trackResult.drug.drugId)}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Stage:</span>
+                        <div className="mt-1">
+                          <Badge
+                            variant={
+                              trackResult.drug.isRejected
+                                ? "destructive"
+                                : "default"
+                            }
+                            className="flex items-center gap-1 w-fit"
+                          >
+                            {trackResult.drug.isRejected ? (
+                              <>
+                                <XCircle className="h-3 w-3" /> Rejected
+                              </>
+                            ) : (
+                              <>
+                                {(() => {
+                                  const Icon =
+                                    stageIcons[trackResult.drug.stage] ??
+                                    Factory;
+                                  return <Icon className="h-3 w-3" />;
+                                })()}
+                                {stageLabels[trackResult.drug.stage] ??
+                                  "Unknown"}
+                              </>
+                            )}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">
+                          Current Owner:
+                        </span>
+                        <p className="font-mono text-xs break-all">
+                          {trackResult.drug.currentOwner ===
+                          "0x0000000000000000000000000000000000000000"
+                            ? "Sold (no owner)"
+                            : `${trackResult.drug.currentOwner.slice(0, 10)}...${trackResult.drug.currentOwner.slice(-6)}`}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Mfg Date:</span>
+                        <p className="font-medium">
+                          {formatTimestamp(trackResult.drug.manufacturingDate)}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">
+                          Expiry Date:
+                        </span>
+                        <p className="font-medium">
+                          {formatTimestamp(trackResult.drug.expiryDate)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* QR Code */}
+                  {trackResult.drug.qrHash && (
+                    <div className="flex flex-col items-center gap-2 pt-2 border-t">
+                      <p className="text-xs text-muted-foreground font-medium">Product QR Code</p>
+                      <div className="bg-white p-3 rounded-lg">
+                        <QRCodeSVG
+                          value={trackResult.drug.qrHash}
+                          size={140}
+                          level="H"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono break-all text-center max-w-full">
+                        {trackResult.drug.qrHash}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Journey */}
+                  <div>
+                    <h4 className="font-semibold text-sm mb-3">
+                      Ownership Journey ({trackResult.journey.length} step
+                      {trackResult.journey.length !== 1 ? "s" : ""})
+                    </h4>
+                    <div className="space-y-2">
+                      {trackResult.journey.map((step, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {step.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground font-mono truncate">
+                              {step.address}
+                            </p>
+                          </div>
+                          {index < trackResult.journey.length - 1 && (
+                            <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
 
-          <Dialog>
+          {/* Verify Authenticity Dialog */}
+          <Dialog
+            open={verifyOpen}
+            onOpenChange={(open) => {
+              setVerifyOpen(open);
+              if (!open) {
+                setVerifyDrugId("");
+                setVerifyQrHash("");
+                setVerifyError(null);
+                setVerifyResult(null);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button
                 variant="secondary"
@@ -153,22 +563,147 @@ export default function SupplyChainDashboard() {
                 Verify Authenticity
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Verify Product Authenticity</DialogTitle>
                 <DialogDescription>
-                  Enter the product's unique ID or scan its QR code to verify.
+                  Enter the on-chain drug ID and its QR hash to verify
+                  authenticity.
                 </DialogDescription>
               </DialogHeader>
-              <form className="space-y-5 mt-5">
+              <form onSubmit={handleVerifyProduct} className="space-y-4 mt-4">
+                {verifyError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{verifyError}</AlertDescription>
+                  </Alert>
+                )}
                 <div>
-                  <Label className="mb-1 block">Product ID</Label>
-                  <Input placeholder="Enter product ID" />
+                  <Label className="mb-1 block">On-Chain Drug ID</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 1, 2, 3..."
+                    value={verifyDrugId}
+                    onChange={(e) => setVerifyDrugId(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 block">QR Hash</Label>
+                  <div className="relative">
+                    <Input
+                      placeholder={verifyFetchingHash ? "Fetching QR hash..." : "Auto-filled from blockchain"}
+                      value={verifyQrHash}
+                      onChange={(e) => setVerifyQrHash(e.target.value)}
+                      readOnly={verifyFetchingHash}
+                      required
+                      className="font-mono text-xs"
+                    />
+                    {verifyFetchingHash && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    QR hash is auto-fetched when you enter a valid drug ID.
+                  </p>
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit">Verify</Button>
+                  <Button type="submit" disabled={verifyLoading}>
+                    {verifyLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "Verify"
+                    )}
+                  </Button>
                 </div>
               </form>
+
+              {/* Verify Results */}
+              {verifyResult && (
+                <div className="space-y-4 mt-2 border-t pt-4">
+                  <h4 className="font-semibold text-sm">Verification Result</h4>
+
+                  {/* Drug Name */}
+                  <p className="text-sm">
+                    <span className="text-muted-foreground">Drug:</span>{" "}
+                    <span className="font-medium">{verifyResult.drugName}</span>
+                  </p>
+
+                  {/* Authenticity Badge */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {verifyResult.isAuthentic ? (
+                      <Badge className="flex items-center gap-1 bg-green-600 text-white">
+                        <CheckCircle className="h-3 w-3" />
+                        Authentic
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="destructive"
+                        className="flex items-center gap-1"
+                      >
+                        <XCircle className="h-3 w-3" />
+                        Not Authentic
+                      </Badge>
+                    )}
+                    {verifyResult.isExpired && (
+                      <Badge
+                        variant="destructive"
+                        className="flex items-center gap-1"
+                      >
+                        <AlertCircle className="h-3 w-3" />
+                        Expired
+                      </Badge>
+                    )}
+                    {verifyResult.isRejected && (
+                      <Badge
+                        variant="destructive"
+                        className="flex items-center gap-1"
+                      >
+                        <XCircle className="h-3 w-3" />
+                        Rejected
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Stage:</span>
+                      <p className="font-medium">
+                        {stageLabels[verifyResult.stage] ?? "Unknown"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">
+                        Current Owner:
+                      </span>
+                      <p className="font-medium text-xs break-all">
+                        {verifyResult.ownerName}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* QR Code */}
+                  {verifyResult.qrHash && (
+                    <div className="flex flex-col items-center gap-2 pt-2 border-t">
+                      <p className="text-xs text-muted-foreground font-medium">Product QR Code</p>
+                      <div className="bg-white p-3 rounded-lg">
+                        <QRCodeSVG
+                          value={verifyResult.qrHash}
+                          size={160}
+                          level="H"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono break-all text-center max-w-full">
+                        {verifyResult.qrHash}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </DialogContent>
           </Dialog>
         </div>

@@ -14,6 +14,7 @@ export async function GET() {
         id: usersTable.id,
         fullName: usersTable.fullName,
         organization: usersTable.organization,
+        walletId: usersTable.walletId,
       })
       .from(usersTable)
       .where(

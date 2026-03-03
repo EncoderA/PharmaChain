@@ -10,6 +10,8 @@ import {
   Eye,
   CheckCircle,
   AlertCircle,
+  Loader2,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,10 +45,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/contexts/user-context";
+<<<<<<< HEAD
 import { DataTable } from "@/components/ui/data-table";
+=======
+import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
+>>>>>>> 196c0ac (on-chain off-chain connection)
 
 interface Product {
   id: number;
@@ -58,6 +72,7 @@ interface Product {
   status: "Verified" | "Pending" | "Expired";
   manufacturerId: number | null;
   currentOwnerId: number | null;
+  onChainDrugId: number | null;
   manufacturingDate: string | null;
   expiryDate: string | null;
   blockchainHash: string | null;
@@ -109,8 +124,20 @@ export default function ProductsPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [transferProduct, setTransferProduct] = useState<Product | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [distributors, setDistributors] = useState<{ address: string; name: string; id: number }[]>([]);
+  const [selectedDistributor, setSelectedDistributor] = useState("");
   const router = useRouter();
   const { user } = useUser();
+  const {
+    registerDrug,
+    getDrugCounter,
+    transferToDistributor,
+    getMyDistributors,
+  } = useSupplyChainContract();
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -175,31 +202,89 @@ export default function ProductsPage() {
     setAddLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const body = {
-      name: formData.get("name") as string,
-      productCode: formData.get("productCode") as string,
-      batch: formData.get("batch") as string,
-      category: formData.get("category") as string,
-      stock: parseInt(formData.get("stock") as string) || 0,
-      expiryDate: formData.get("expiryDate") as string || undefined,
-    };
+    const name = formData.get("name") as string;
+    const productCode = formData.get("productCode") as string;
+    const batch = formData.get("batch") as string;
+    const category = formData.get("category") as string;
+    const stock = parseInt(formData.get("stock") as string) || 0;
+    const expiryDateStr = formData.get("expiryDate") as string;
+    const manufacturingDateStr = formData.get("manufacturingDate") as string;
+
+    if (!name || !productCode) {
+      setAddError("Product name and code are required");
+      setAddLoading(false);
+      return;
+    }
 
     try {
+      // Convert dates to Unix timestamps (seconds) for the smart contract
+      const mfgTimestamp = manufacturingDateStr
+        ? Math.floor(new Date(manufacturingDateStr).getTime() / 1000)
+        : Math.floor(Date.now() / 1000);
+      const expTimestamp = expiryDateStr
+        ? Math.floor(new Date(expiryDateStr).getTime() / 1000)
+        : mfgTimestamp + 365 * 24 * 60 * 60; // default: 1 year from mfg
+
+      if (expTimestamp <= mfgTimestamp) {
+        setAddError("Expiry date must be after manufacturing date");
+        setAddLoading(false);
+        return;
+      }
+
+      // Step 1: Register on-chain via MetaMask
+      const { txHash, blockNumber } = await registerDrug(name, mfgTimestamp, expTimestamp);
+
+      // Step 2: Get the on-chain drug ID (the counter after registration)
+      const drugId = await getDrugCounter();
+
+      // Step 3: Save to database
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          name,
+          productCode,
+          batch: batch || undefined,
+          category: category || undefined,
+          stock,
+          manufacturingDate: manufacturingDateStr || new Date().toISOString(),
+          expiryDate: expiryDateStr || undefined,
+          blockchainHash: txHash,
+          status: "Verified",
+          onChainDrugId: Number(drugId),
+        }),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to create product");
+        throw new Error(data.error || "Failed to save product to database");
       }
+
+      const product = await res.json();
+
+      // Step 4: Record the transaction
+      await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: product.id,
+          action: "Manufactured",
+          fromUserId: user?.id,
+          txHash,
+          blockNumber,
+          status: "Confirmed",
+        }),
+      });
 
       setAddDialogOpen(false);
       fetchProducts();
-    } catch (err: any) {
-      setAddError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setAddError("MetaMask transaction was rejected.");
+      } else {
+        setAddError(message);
+      }
     } finally {
       setAddLoading(false);
     }
@@ -207,6 +292,7 @@ export default function ProductsPage() {
 
   const canAddProducts = user?.role === "manufacturer" || user?.role === "admin";
 
+<<<<<<< HEAD
   const columns: ColumnDef<Product>[] = [
     {
       accessorKey: "name",
@@ -296,6 +382,121 @@ export default function ProductsPage() {
       ),
     },
   ];
+=======
+  // Load distributors under this manufacturer when transfer dialog opens
+  const openTransferDialog = async (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTransferProduct(product);
+    setTransferError(null);
+    setSelectedDistributor("");
+    setTransferDialogOpen(true);
+
+    try {
+      // Get on-chain distributor addresses
+      const addresses = await getMyDistributors();
+
+      // Match against DB users for names
+      const res = await fetch("/api/user");
+      if (res.ok) {
+        const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string }[] = await res.json();
+        const matched = addresses.map((addr) => {
+          const dbUser = dbUsers.find(
+            (u) => u.walletId.toLowerCase() === addr.toLowerCase() && u.status === "active"
+          );
+          return {
+            address: addr,
+            name: dbUser?.fullName ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+            id: dbUser?.id ?? 0,
+          };
+        });
+        setDistributors(matched);
+      }
+    } catch {
+      setDistributors([]);
+    }
+  };
+
+  const handleTransferToDistributor = async () => {
+    if (!transferProduct || !selectedDistributor) return;
+    setTransferLoading(true);
+    setTransferError(null);
+
+    try {
+      const distributor = distributors.find((d) => d.address === selectedDistributor);
+      if (!distributor) throw new Error("Select a distributor");
+
+      if (!transferProduct.blockchainHash) {
+        throw new Error("This product was not registered on-chain. Cannot transfer.");
+      }
+
+      // Use stored on-chain drug ID if available, otherwise scan the chain
+      let onChainDrugId: number | null = transferProduct.onChainDrugId ?? null;
+
+      if (onChainDrugId === null) {
+        const { getSupplyChainContract } = await import("@/blockchain/contract");
+        const contract = await getSupplyChainContract();
+        const counter = await contract.drugCounter();
+
+        for (let i = Number(counter); i >= 1; i--) {
+          const drug = await contract.getDrugDetails(i);
+          if (
+            drug.name === transferProduct.name &&
+            Number(drug.stage) === 0 && // Manufactured stage
+            !drug.isRejected
+          ) {
+            onChainDrugId = i;
+            break;
+          }
+        }
+      }
+
+      if (onChainDrugId === null) {
+        throw new Error("Could not find this drug on-chain in Manufactured stage.");
+      }
+
+      // Step 1: Transfer on-chain
+      const { txHash, blockNumber } = await transferToDistributor(onChainDrugId, distributor.address);
+
+      // Step 2: Update product in DB — change currentOwnerId
+      await fetch(`/api/products/${transferProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentOwnerId: distributor.id || undefined,
+          status: "Verified",
+        }),
+      });
+
+      // Step 3: Record transaction
+      await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: transferProduct.id,
+          action: "Distributed",
+          fromUserId: user?.id,
+          toUserId: distributor.id || undefined,
+          txHash,
+          blockNumber,
+          status: "Confirmed",
+        }),
+      });
+
+      setTransferDialogOpen(false);
+      setTransferProduct(null);
+      fetchProducts();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setTransferError("MetaMask transaction was rejected.");
+      } else {
+        setTransferError(message);
+      }
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+>>>>>>> 196c0ac (on-chain off-chain connection)
 
   return (
     <div className="flex-1 p-6 bg-background text-foreground space-y-6">
@@ -328,12 +529,13 @@ export default function ProductsPage() {
                     Fill in the details of the new product.
                   </DialogDescription>
                 </DialogHeader>
-                {addError && (
-                  <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
-                    {addError}
-                  </div>
-                )}
                 <form onSubmit={handleAddProduct} className="space-y-4 mt-4">
+                  {addError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{addError}</AlertDescription>
+                    </Alert>
+                  )}
                   <div>
                     <Label className="mb-1 block">Product Code</Label>
                     <Input name="productCode" placeholder="e.g. PRD-005" required />
@@ -355,15 +557,29 @@ export default function ProductsPage() {
                     <Input name="stock" type="number" placeholder="0" defaultValue={0} />
                   </div>
                   <div>
+                    <Label className="mb-1 block">Manufacturing Date</Label>
+                    <Input name="manufacturingDate" type="date" />
+                  </div>
+                  <div>
                     <Label className="mb-1 block">Expiry Date</Label>
                     <Input name="expiryDate" type="date" />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    This will register the drug on-chain via MetaMask and save it to the database.
+                  </p>
                   <div className="flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setAddDialogOpen(false)} disabled={addLoading}>
                       Cancel
                     </Button>
                     <Button type="submit" disabled={addLoading}>
-                      {addLoading ? "Saving..." : "Save Product"}
+                      {addLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Registering on-chain...
+                        </>
+                      ) : (
+                        "Register Product"
+                      )}
                     </Button>
                   </div>
                 </form>
@@ -464,8 +680,138 @@ export default function ProductsPage() {
             {filteredProducts.length !== 1 ? "s" : ""} found
           </CardDescription>
         </CardHeader>
+<<<<<<< HEAD
         <CardContent>
           {loading ? (
+=======
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto border-collapse">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Product
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Manufacturer
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Batch
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Stock
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Last Updated
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                      Loading products...
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((product) => {
+                    const stockStatus = getStockStatus(product.stock);
+                    return (
+                      <tr
+                        key={product.id}
+                        className="border-b border-border cursor-pointer hover:bg-muted/20"
+                        onClick={() => router.push(`/products/${product.id}`)}
+                      >
+                        <td className="px-4 py-3">
+                          <div>
+                            <div className="font-medium">{product.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {product.productCode}
+                            </div>
+                            {product.category && (
+                              <div className="text-xs text-primary">
+                                {product.category}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {product.manufacturerName ?? "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-mono">
+                          {product.batch ?? "N/A"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-sm">{product.stock} units</span>
+                            <span className={`text-xs ${stockStatus.className}`}>
+                              {stockStatus.label}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {getStatusBadge(product.status)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {formatDate(product.updatedAt)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => handleViewDetails(product, e)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>View Details</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            {/* Transfer to Distributor — manufacturer only, Verified products */}
+                            {user?.role === "manufacturer" &&
+                              product.status === "Verified" &&
+                              product.manufacturerId === user.id && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => openTransferDialog(product, e)}
+                                      >
+                                        <Send className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Transfer to Distributor</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {!loading && filteredProducts.length === 0 && (
+>>>>>>> 196c0ac (on-chain off-chain connection)
             <div className="text-center py-8 text-muted-foreground">
               Loading products...
             </div>
@@ -541,6 +887,14 @@ export default function ProductsPage() {
                     {getStatusBadge(selectedProduct.status)}
                   </div>
                 </div>
+                {selectedProduct.onChainDrugId != null && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Blockchain Drug ID
+                    </label>
+                    <p className="text-sm font-mono">#{selectedProduct.onChainDrugId}</p>
+                  </div>
+                )}
               </div>
               {selectedProduct.blockchainHash && (
                 <div>
@@ -571,6 +925,94 @@ export default function ProductsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer to Distributor Dialog */}
+      <Dialog open={transferDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setTransferDialogOpen(false);
+          setTransferProduct(null);
+          setTransferError(null);
+          setSelectedDistributor("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transfer to Distributor</DialogTitle>
+            <DialogDescription>
+              {transferProduct
+                ? `Transfer "${transferProduct.name}" (${transferProduct.productCode}) to a registered distributor on-chain.`
+                : "Select a distributor to transfer this product to."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {transferError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{transferError}</AlertDescription>
+              </Alert>
+            )}
+
+            {distributors.length === 0 && !transferError ? (
+              <p className="text-sm text-muted-foreground">
+                No distributors registered under your account. Add distributors from the Users page first.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label className="mb-1 block">Select Distributor</Label>
+                  <Select value={selectedDistributor} onValueChange={setSelectedDistributor}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a distributor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {distributors.map((d) => (
+                        <SelectItem key={d.address} value={d.address}>
+                          {d.name} ({d.address.slice(0, 6)}...{d.address.slice(-4)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This will call transferToDistributor on-chain via MetaMask and update the database.
+                </p>
+              </>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setTransferDialogOpen(false);
+                  setTransferProduct(null);
+                }}
+                disabled={transferLoading}
+              >
+                Cancel
+              </Button>
+              {distributors.length > 0 && (
+                <Button
+                  onClick={handleTransferToDistributor}
+                  disabled={transferLoading || !selectedDistributor}
+                >
+                  {transferLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Transferring on-chain...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Transfer
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

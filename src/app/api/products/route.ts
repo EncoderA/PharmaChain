@@ -67,6 +67,7 @@ export async function GET(req: Request) {
         status: productsTable.status,
         manufacturerId: productsTable.manufacturerId,
         currentOwnerId: productsTable.currentOwnerId,
+        onChainDrugId: productsTable.onChainDrugId,
         manufacturingDate: productsTable.manufacturingDate,
         expiryDate: productsTable.expiryDate,
         blockchainHash: productsTable.blockchainHash,
@@ -141,6 +142,7 @@ export async function POST(req: Request) {
           : null,
         expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
         blockchainHash: body.blockchainHash || null,
+        onChainDrugId: body.onChainDrugId ?? null,
       })
       .returning();
 

@@ -69,19 +69,20 @@ export function PendingRequests({
     setActionSuccess(null);
 
     try {
-      // Step 1: Register the user on-chain via MetaMask
       if (!user.walletId) {
         throw new Error("User has no wallet address. Cannot register on-chain.");
       }
 
+      // Register the user on-chain based on their role
+      // Manufacturer calls addDistributor / addWholesaler which registers them under the caller
       if (user.role === "distributor") {
         await addDistributor(user.walletId);
-      } else if (user.role === "pharmacist") {
-        // Pharmacist maps to wholesaler on-chain
+      } else {
+        // pharmacist maps to wholesaler on-chain
         await addWholesaler(user.walletId);
       }
 
-      // Step 2: Update DB status to active
+      // Update DB status to active
       const res = await fetch(`/api/user/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -100,7 +101,6 @@ export function PendingRequests({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to approve user";
-      // Provide a clearer message for common MetaMask errors
       if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
         setActionError("MetaMask transaction was rejected. The user was not approved.");
       } else {
@@ -117,6 +117,7 @@ export function PendingRequests({
     setActionSuccess(null);
 
     try {
+      // Update DB status to rejected (no on-chain action needed — they were never added on-chain)
       const res = await fetch(`/api/user/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -167,7 +168,7 @@ export function PendingRequests({
         </CardTitle>
         <CardDescription>
           Approve or reject users who registered under you. Approving will
-          register their wallet on the blockchain via MetaMask.
+          register them on-chain via MetaMask.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -252,6 +253,11 @@ export function PendingRequests({
                     disabled={isProcessing || !user.walletId}
                     onClick={() => handleApprove(user)}
                     className="bg-green-600 hover:bg-green-700 text-white"
+                    title={
+                      !user.walletId
+                        ? "User has no wallet address"
+                        : undefined
+                    }
                   >
                     {isProcessing ? (
                       <Spinner className="h-4 w-4" />
