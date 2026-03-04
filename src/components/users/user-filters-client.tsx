@@ -27,6 +27,7 @@ interface User {
 
 interface UserFiltersClientProps {
   users: User[];
+  callerRole?: string;
   onDelete?: () => void;
 }
 
@@ -50,7 +51,7 @@ const getInitials = (name: string) => {
     .slice(0, 2);
 };
 
-export function UserFiltersClient({ users, onDelete }: UserFiltersClientProps) {
+export function UserFiltersClient({ users, callerRole, onDelete }: UserFiltersClientProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
 
@@ -140,6 +141,7 @@ export function UserFiltersClient({ users, onDelete }: UserFiltersClientProps) {
                       userName={user.fullName}
                       userRole={user.role}
                       walletId={user.walletId}
+                      callerRole={callerRole}
                       onDelete={onDelete}
                     />
                   </TableCell>

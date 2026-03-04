@@ -335,12 +335,14 @@ export default function ProductDetailPage() {
       if (res.ok) {
         const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string; manufacturerId: number | null }[] = await res.json();
         let wholesalerList = dbUsers.filter(
-          (u) => u.role === "wholesaler" && u.status === "active" && u.walletId
+          (u) => (u.role === "wholesaler" || u.role === "pharmacist") && u.status === "active" && u.walletId
         );
 
-        // Scope to wholesalers under the same manufacturer hierarchy
-        if (user?.manufacturerId) {
-          const scoped = wholesalerList.filter((u) => u.manufacturerId === user.manufacturerId);
+        // Scope wholesalers to the same manufacturer hierarchy.
+        // Use the product's manufacturerId first (always set), then fall back to the distributor's manufacturerId.
+        const mfrId = product?.manufacturerId ?? user?.manufacturerId;
+        if (mfrId) {
+          const scoped = wholesalerList.filter((u) => u.manufacturerId === mfrId);
           if (scoped.length > 0) {
             wholesalerList = scoped;
           }
@@ -550,8 +552,8 @@ export default function ProductDetailPage() {
                 </Button>
               )}
 
-            {/* Wholesaler: Mark as Sold */}
-            {user?.role === "wholesaler" &&
+            {/* Wholesaler/Pharmacist: Mark as Sold */}
+            {(user?.role === "wholesaler" || user?.role === "pharmacist") &&
               product.currentOwnerId === user.id && (
                 <Button
                   variant="outline"

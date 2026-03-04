@@ -10,13 +10,29 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PendingRequests } from "@/components/users/pending-requests";
-import { Users as UsersIcon, UserCheck, UserX, Clock, Truck, Building2, Store } from "lucide-react";
+import { Users as UsersIcon, UserCheck, UserX, Clock, Truck, Building2, Store, Trash2, Loader2 } from "lucide-react";
 import { UserFiltersClient } from "@/components/users/user-filters-client";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useUser } from "@/contexts/user-context";
 import axios from "axios";
 import { AddUserDialog } from "@/components/admin/add-user-dialog";
@@ -42,12 +58,17 @@ const UsersPage = () => {
   const [error, setError] = useState<string | null>(null);
   const { user: currentUser, isLoading: userLoading } = useUser();
   const router = useRouter();
-  const { getMyDistributors, getMyWholesalers } = useSupplyChainContract();
+  const { getMyDistributors, getMyWholesalers, removeDistributor, removeWholesaler } = useSupplyChainContract();
 
   // My on-chain participants (manufacturer only)
-  const [myDistributors, setMyDistributors] = useState<{ address: string; name: string; organization: string }[]>([]);
-  const [myWholesalers, setMyWholesalers] = useState<{ address: string; name: string; organization: string }[]>([]);
+  const [myDistributors, setMyDistributors] = useState<{ address: string; name: string; organization: string; dbId: number | null }[]>([]);
+  const [myWholesalers, setMyWholesalers] = useState<{ address: string; name: string; organization: string; dbId: number | null }[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
+
+  // Removal state
+  const [removeTarget, setRemoveTarget] = useState<{ address: string; name: string; role: "distributor" | "wholesaler"; dbId: number | null } | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   const isAuthorized =
     !userLoading &&
@@ -99,44 +120,45 @@ const UsersPage = () => {
   }, [isAuthorized, fetchUsers]);
 
   // Fetch on-chain participants for manufacturers
+  const fetchMyParticipants = useCallback(async () => {
+    if (currentUser?.role !== "manufacturer") return;
+    setParticipantsLoading(true);
+    try {
+      const [distAddresses, wholAddresses] = await Promise.all([
+        getMyDistributors(),
+        getMyWholesalers(),
+      ]);
+
+      // Match addresses with DB users for display names
+      const res = await fetch("/api/user");
+      const dbUsers: { id: number; fullName: string; walletId: string; organization: string; status: string }[] =
+        res.ok ? await res.json() : [];
+
+      const matchAddr = (addr: string) => {
+        const u = dbUsers.find(
+          (u) => u.walletId.toLowerCase() === addr.toLowerCase() && u.status === "active"
+        );
+        return {
+          address: addr,
+          name: u?.fullName ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
+          organization: u?.organization ?? "Unknown",
+          dbId: u?.id ?? null,
+        };
+      };
+
+      setMyDistributors(distAddresses.map(matchAddr));
+      setMyWholesalers(wholAddresses.map(matchAddr));
+    } catch (err) {
+      console.error("Failed to fetch on-chain participants:", err);
+    } finally {
+      setParticipantsLoading(false);
+    }
+  }, [currentUser?.role, getMyDistributors, getMyWholesalers]);
+
   useEffect(() => {
     if (!isAuthorized || currentUser?.role !== "manufacturer") return;
-
-    const fetchMyParticipants = async () => {
-      setParticipantsLoading(true);
-      try {
-        const [distAddresses, wholAddresses] = await Promise.all([
-          getMyDistributors(),
-          getMyWholesalers(),
-        ]);
-
-        // Match addresses with DB users for display names
-        const res = await fetch("/api/user");
-        const dbUsers: { fullName: string; walletId: string; organization: string; status: string }[] =
-          res.ok ? await res.json() : [];
-
-        const matchAddr = (addr: string) => {
-          const u = dbUsers.find(
-            (u) => u.walletId.toLowerCase() === addr.toLowerCase() && u.status === "active"
-          );
-          return {
-            address: addr,
-            name: u?.fullName ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
-            organization: u?.organization ?? "Unknown",
-          };
-        };
-
-        setMyDistributors(distAddresses.map(matchAddr));
-        setMyWholesalers(wholAddresses.map(matchAddr));
-      } catch (err) {
-        console.error("Failed to fetch on-chain participants:", err);
-      } finally {
-        setParticipantsLoading(false);
-      }
-    };
-
     fetchMyParticipants();
-  }, [isAuthorized, currentUser?.role, getMyDistributors, getMyWholesalers]);
+  }, [isAuthorized, currentUser?.role, fetchMyParticipants]);
 
   const handleRetry = () => {
     fetchUsers();
@@ -144,10 +166,59 @@ const UsersPage = () => {
 
   const handleUserDeleted = () => {
     fetchUsers();
+    if (currentUser?.role === "manufacturer") {
+      fetchMyParticipants();
+    }
   };
 
   const handleStatusChanged = () => {
     fetchUsers();
+  };
+
+  /**
+   * Remove a distributor or wholesaler from both on-chain and off-chain.
+   * 1. Remove from blockchain via removeDistributor/removeWholesaler
+   * 2. Delete from database via DELETE /api/user/:id
+   * 3. Refresh both lists
+   */
+  const handleRemoveParticipant = async () => {
+    if (!removeTarget) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      // Step 1: Remove from blockchain
+      if (removeTarget.role === "distributor") {
+        await removeDistributor(removeTarget.address);
+      } else {
+        await removeWholesaler(removeTarget.address);
+      }
+
+      // Step 2: Delete from database (if user exists in DB)
+      if (removeTarget.dbId) {
+        const response = await fetch(`/api/user/${removeTarget.dbId}`, {
+          method: "DELETE",
+        });
+        if (!response.ok) {
+          const data = await response.json();
+          // Log but don't block — on-chain removal already succeeded
+          console.warn("DB deletion warning:", data.error);
+        }
+      }
+
+      // Step 3: Refresh both lists
+      setRemoveTarget(null);
+      fetchMyParticipants();
+      fetchUsers();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to remove participant";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setRemoveError("MetaMask transaction was rejected. The user was not removed.");
+      } else {
+        setRemoveError(message);
+      }
+    } finally {
+      setRemoving(false);
+    }
   };
 
   // --- Early returns (all hooks are above this point) ---
@@ -306,6 +377,24 @@ const UsersPage = () => {
                             <Badge variant="secondary" className="font-mono text-xs">
                               {d.address.slice(0, 6)}...{d.address.slice(-4)}
                             </Badge>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                                    onClick={() => {
+                                      setRemoveError(null);
+                                      setRemoveTarget({ address: d.address, name: d.name, role: "distributor", dbId: d.dbId });
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Remove distributor</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </div>
                         </div>
                       ))}
@@ -350,6 +439,24 @@ const UsersPage = () => {
                             <Badge variant="secondary" className="font-mono text-xs">
                               {w.address.slice(0, 6)}...{w.address.slice(-4)}
                             </Badge>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                                    onClick={() => {
+                                      setRemoveError(null);
+                                      setRemoveTarget({ address: w.address, name: w.name, role: "wholesaler", dbId: w.dbId });
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Remove wholesaler</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </div>
                         </div>
                       ))}
@@ -369,6 +476,7 @@ const UsersPage = () => {
             <CardContent className="p-0">
               <UserFiltersClient
                 users={activeUsers}
+                callerRole={currentUser.role}
                 onDelete={handleUserDeleted}
               />
             </CardContent>
@@ -398,6 +506,45 @@ const UsersPage = () => {
           </div>
         </>
       )}
+
+      {/* Remove Participant Confirmation Dialog */}
+      <AlertDialog open={!!removeTarget} onOpenChange={(open) => { if (!open) setRemoveTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {removeTarget?.role === "distributor" ? "Distributor" : "Wholesaler"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove{" "}
+              <span className="font-semibold text-foreground">{removeTarget?.name}</span>
+              ? This will remove them from both the blockchain and the database. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {removeError && (
+            <p className="text-sm text-red-500 px-1">{removeError}</p>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing} onClick={() => setRemoveTarget(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleRemoveParticipant();
+              }}
+              disabled={removing}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {removing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                "Remove"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

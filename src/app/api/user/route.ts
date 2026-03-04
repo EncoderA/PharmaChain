@@ -4,7 +4,7 @@ import { usersTable } from "@/db/schema";
 import { and, eq, or } from "drizzle-orm";
 import { hashPassword, getAuthUser } from "@/lib/auth";
 
-const ALLOWED_ROLES = ["admin", "manufacturer", "distributor", "pharmacist"];
+const ALLOWED_ROLES = ["admin", "manufacturer", "distributor", "pharmacist", "wholesaler"];
 
 // Standard columns returned for user queries
 const userColumns = {

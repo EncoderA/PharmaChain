@@ -26,10 +26,11 @@ interface UserActionsProps {
   userName?: string;
   userRole?: string;
   walletId?: string;
+  callerRole?: string;
   onDelete?: () => void;
 }
 
-export function UserActions({ userId, userName, userRole, walletId, onDelete }: UserActionsProps) {
+export function UserActions({ userId, userName, userRole, walletId, callerRole, onDelete }: UserActionsProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,17 +39,20 @@ export function UserActions({ userId, userName, userRole, walletId, onDelete }: 
     removeManufacturer,
     removeDistributor,
     removeWholesaler,
+    removeParticipant,
   } = useSupplyChainContract();
 
   /**
-   * Call the role-specific on-chain removal function.
-   * - admin       → removeAdmin(address)
-   * - manufacturer → removeManufacturer(address)
-   * - distributor  → removeDistributor(address)
-   * - pharmacist   → removeWholesaler(address)  (pharmacist = wholesaler on-chain)
-   * - wholesaler   → removeWholesaler(address)
+   * Call the appropriate on-chain removal function based on caller and target roles.
+   * - If the caller is an admin, use removeParticipant (works for any role)
+   * - If the caller is a manufacturer, use the role-specific removal function
    */
   const removeOnChain = async (address: string, role: string) => {
+    // Admins should use removeParticipant for all non-admin roles
+    if (callerRole === "admin" && role !== "admin") {
+      return removeParticipant(address);
+    }
+
     switch (role) {
       case "admin":
         return removeAdmin(address);

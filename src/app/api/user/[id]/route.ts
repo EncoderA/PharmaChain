@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
 import { usersTable, productsTable, transactionsTable } from "@/db/schema";
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 
 /**
@@ -116,10 +116,10 @@ export async function DELETE(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // Only admins can delete users
-    if (authUser.role !== "admin") {
+    // Only admins and manufacturers can delete users
+    if (authUser.role !== "admin" && authUser.role !== "manufacturer") {
       return NextResponse.json(
-        { error: "Only admins can delete users" },
+        { error: "Only admins and manufacturers can delete users" },
         { status: 403 },
       );
     }
@@ -133,7 +133,11 @@ export async function DELETE(
 
     // Check user exists
     const existing = await db
-      .select({ id: usersTable.id, role: usersTable.role })
+      .select({
+        id: usersTable.id,
+        role: usersTable.role,
+        manufacturerId: usersTable.manufacturerId,
+      })
       .from(usersTable)
       .where(eq(usersTable.id, userId));
 
@@ -149,47 +153,56 @@ export async function DELETE(
       );
     }
 
-    // Check for foreign key references in products
-    const productRefs = await db
-      .select({ id: productsTable.id })
-      .from(productsTable)
-      .where(
-        or(
-          eq(productsTable.manufacturerId, userId),
-          eq(productsTable.currentOwnerId, userId),
-        ),
-      );
-
-    if (productRefs.length > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete user — they are referenced by ${productRefs.length} product(s). Remove or reassign those products first.`,
-        },
-        { status: 409 },
-      );
+    // Manufacturers can only delete distributors/wholesalers/pharmacists registered under them
+    if (authUser.role === "manufacturer") {
+      const target = existing[0];
+      const allowedRoles = ["distributor", "wholesaler", "pharmacist"];
+      if (!allowedRoles.includes(target.role)) {
+        return NextResponse.json(
+          { error: "Manufacturers can only delete distributors and wholesalers registered under them" },
+          { status: 403 },
+        );
+      }
+      if (target.manufacturerId !== authUser.id) {
+        return NextResponse.json(
+          { error: "You can only delete users registered under your account" },
+          { status: 403 },
+        );
+      }
     }
 
-    // Check for foreign key references in transactions
-    const transactionRefs = await db
-      .select({ id: transactionsTable.id })
-      .from(transactionsTable)
-      .where(
-        or(
-          eq(transactionsTable.fromUserId, userId),
-          eq(transactionsTable.toUserId, userId),
-        ),
-      );
+    // Nullify foreign key references so deletion is not blocked.
+    // Product and transaction history is preserved — only the user link is cleared.
 
-    if (transactionRefs.length > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete user — they are referenced by ${transactionRefs.length} transaction(s). Remove or reassign those transactions first.`,
-        },
-        { status: 409 },
-      );
-    }
+    // Products: nullify manufacturerId and currentOwnerId
+    await db
+      .update(productsTable)
+      .set({ manufacturerId: null })
+      .where(eq(productsTable.manufacturerId, userId));
 
-    // Safe to delete
+    await db
+      .update(productsTable)
+      .set({ currentOwnerId: null })
+      .where(eq(productsTable.currentOwnerId, userId));
+
+    // Transactions: nullify fromUserId and toUserId
+    await db
+      .update(transactionsTable)
+      .set({ fromUserId: null })
+      .where(eq(transactionsTable.fromUserId, userId));
+
+    await db
+      .update(transactionsTable)
+      .set({ toUserId: null })
+      .where(eq(transactionsTable.toUserId, userId));
+
+    // Users: nullify manufacturerId for any users registered under this user
+    await db
+      .update(usersTable)
+      .set({ manufacturerId: null })
+      .where(eq(usersTable.manufacturerId, userId));
+
+    // Now safe to delete
     await db.delete(usersTable).where(eq(usersTable.id, userId));
 
     return NextResponse.json({ success: true });

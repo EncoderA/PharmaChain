@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +27,13 @@ import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
 type UserRole = "admin" | "manufacturer" | "distributor" | "pharmacist" | "wholesaler";
 
+interface Manufacturer {
+  id: number;
+  fullName: string;
+  organization: string;
+  walletId: string;
+}
+
 interface AddUserDialogProps {
   onUserAdded: () => void;
 }
@@ -36,6 +43,30 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole | "">("");
+  const [manufacturerId, setManufacturerId] = useState("");
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [loadingManufacturers, setLoadingManufacturers] = useState(false);
+
+  const needsManufacturer = role === "distributor" || role === "pharmacist" || role === "wholesaler";
+
+  // Fetch manufacturers when a role that needs one is selected
+  useEffect(() => {
+    if (needsManufacturer && manufacturers.length === 0) {
+      setLoadingManufacturers(true);
+      fetch("/api/manufacturers")
+        .then((res) => res.json())
+        .then((data) => setManufacturers(data))
+        .catch(() => setManufacturers([]))
+        .finally(() => setLoadingManufacturers(false));
+    }
+  }, [needsManufacturer, manufacturers.length]);
+
+  // Reset manufacturer selection when role changes
+  useEffect(() => {
+    if (!needsManufacturer) {
+      setManufacturerId("");
+    }
+  }, [needsManufacturer]);
 
   const {
     addAdmin,
@@ -50,7 +81,7 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const data = {
+    const data: Record<string, string> = {
       fullName: formData.get("fullName") as string,
       email: formData.get("email") as string,
       phone: formData.get("phone") as string,
@@ -60,8 +91,18 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
       role,
     };
 
+    if (needsManufacturer) {
+      data.manufacturerId = manufacturerId;
+    }
+
     if (!data.fullName || !data.email || !data.phone || !data.organization || !data.walletId || !data.role) {
       setError("All fields are required");
+      setLoading(false);
+      return;
+    }
+
+    if (needsManufacturer && !data.manufacturerId) {
+      setError("Please select a manufacturer for this role");
       setLoading(false);
       return;
     }
@@ -103,6 +144,7 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
 
       setOpen(false);
       setRole("");
+      setManufacturerId("");
       onUserAdded();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -119,7 +161,7 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setError(null); setRole(""); } }}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setError(null); setRole(""); setManufacturerId(""); } }}>
       <DialogTrigger asChild>
         <Button className="cursor-pointer">
           <Plus className="h-4 w-4 mr-2" />
@@ -161,6 +203,42 @@ export function AddUserDialog({ onUserAdded }: AddUserDialogProps) {
               </SelectContent>
             </Select>
           </div>
+
+          {needsManufacturer && (
+            <div className="grid gap-2">
+              <Label>Select Manufacturer</Label>
+              {loadingManufacturers ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                  <Spinner className="h-4 w-4" />
+                  Loading manufacturers...
+                </div>
+              ) : manufacturers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  No manufacturers available. Please try again later.
+                </p>
+              ) : (
+                <Select
+                  onValueChange={setManufacturerId}
+                  value={manufacturerId}
+                  required
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a manufacturer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {manufacturers.map((m) => (
+                      <SelectItem key={m.id} value={String(m.id)}>
+                        {m.organization} ({m.fullName})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-xs text-muted-foreground">
+                This user will be registered under the selected manufacturer.
+              </p>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <Label htmlFor="add-fullName">Full Name</Label>

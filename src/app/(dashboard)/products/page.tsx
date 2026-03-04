@@ -418,17 +418,19 @@ export default function ProductsPage() {
     setTransferWholDialogOpen(true);
 
     try {
-      // Fetch active wholesalers from DB, scoped to same manufacturer hierarchy if possible
+      // Fetch active wholesalers from DB, scoped to same manufacturer hierarchy
       const res = await fetch("/api/user");
       if (res.ok) {
         const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string; manufacturerId: number | null }[] = await res.json();
         let wholesalerList = dbUsers.filter(
-          (u) => u.role === "wholesaler" && u.status === "active" && u.walletId
+          (u) => (u.role === "wholesaler" || u.role === "pharmacist") && u.status === "active" && u.walletId
         );
 
-        // If distributor has a manufacturerId, scope wholesalers to same manufacturer
-        if (user?.manufacturerId) {
-          const scoped = wholesalerList.filter((u) => u.manufacturerId === user.manufacturerId);
+        // Scope wholesalers to the same manufacturer hierarchy.
+        // Use the product's manufacturerId first (always set), then fall back to the distributor's manufacturerId.
+        const mfrId = product.manufacturerId ?? user?.manufacturerId;
+        if (mfrId) {
+          const scoped = wholesalerList.filter((u) => u.manufacturerId === mfrId);
           if (scoped.length > 0) {
             wholesalerList = scoped;
           }
