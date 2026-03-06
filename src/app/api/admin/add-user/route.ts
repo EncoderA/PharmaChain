@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
 import { usersTable } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { hashPassword, getAuthUser } from "@/lib/auth";
 
 /**
@@ -10,7 +10,7 @@ import { hashPassword, getAuthUser } from "@/lib/auth";
  * The on-chain role assignment (addAdmin, addManufacturer, addDistributor, addWholesaler)
  * is done from the client via MetaMask BEFORE calling this endpoint.
  *
- * Body: { fullName, organization, email, phone, role, walletId, password?, manufacturerId? }
+ * Body: { fullName, organization, email, phone, role, walletId, password? }
  */
 export async function POST(req: Request) {
   try {
@@ -44,39 +44,6 @@ export async function POST(req: Request) {
     const validRoles = ["admin", "manufacturer", "distributor", "pharmacist", "wholesaler"];
     if (!validRoles.includes(body.role)) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
-    }
-
-    // Determine manufacturerId for roles that need it
-    const needsManufacturer = ["distributor", "pharmacist", "wholesaler"].includes(body.role);
-    let manufacturerId: number | null = null;
-
-    if (needsManufacturer) {
-      if (!body.manufacturerId) {
-        return NextResponse.json(
-          { error: "manufacturerId is required for distributor/wholesaler/pharmacist roles" },
-          { status: 400 },
-        );
-      }
-      manufacturerId = Number(body.manufacturerId);
-
-      // Validate that the manufacturer exists and is active
-      const manufacturer = await db
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(
-          and(
-            eq(usersTable.id, manufacturerId),
-            eq(usersTable.role, "manufacturer"),
-            eq(usersTable.status, "active"),
-          ),
-        );
-
-      if (manufacturer.length === 0) {
-        return NextResponse.json(
-          { error: "Selected manufacturer not found or inactive" },
-          { status: 400 },
-        );
-      }
     }
 
     // Check duplicates
@@ -120,7 +87,6 @@ export async function POST(req: Request) {
         role: body.role,
         walletId: body.walletId,
         password: hashedPassword,
-        manufacturerId,
         status: "active", // Admin-created users are active immediately
       })
       .returning({
@@ -142,3 +108,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -9,14 +9,34 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PendingRequests } from "@/components/users/pending-requests";
-import { Users as UsersIcon, UserCheck, UserX, Clock, Truck, Building2, Store, Trash2, Loader2 } from "lucide-react";
-import { UserFiltersClient } from "@/components/users/user-filters-client";
+import {
+  Users as UsersIcon,
+  UserCheck,
+  UserX,
+  Store,
+  Search,
+  Trash2,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Shield,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  RotateCcw,
+} from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,8 +55,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useUser } from "@/contexts/user-context";
 import axios from "axios";
-import { AddUserDialog } from "@/components/admin/add-user-dialog";
-import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
 interface User {
   id: number;
@@ -47,10 +65,23 @@ interface User {
   organization: string;
   walletId: string;
   status: "active" | "pending" | "rejected";
-  manufacturerId: number | null;
 }
 
-const ALLOWED_ROLES: User["role"][] = ["admin", "manufacturer"];
+const PAGE_SIZE = 10;
+
+const ROLE_BADGE_MAP: Record<string, string> = {
+  admin: "text-red-700 border-red-300 bg-red-50 dark:text-red-400 dark:border-red-800 dark:bg-red-950",
+  manufacturer: "text-blue-700 border-blue-300 bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:bg-blue-950",
+  distributor: "text-orange-700 border-orange-300 bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:bg-orange-950",
+  wholesaler: "text-purple-700 border-purple-300 bg-purple-50 dark:text-purple-400 dark:border-purple-800 dark:bg-purple-950",
+  pharmacist: "text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-800 dark:bg-green-950",
+};
+
+const STATUS_BADGE_MAP: Record<string, { className: string; icon: typeof CheckCircle }> = {
+  active: { className: "text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-800 dark:bg-green-950", icon: CheckCircle },
+  pending: { className: "text-yellow-700 border-yellow-300 bg-yellow-50 dark:text-yellow-400 dark:border-yellow-800 dark:bg-yellow-950", icon: Loader2 },
+  rejected: { className: "text-red-700 border-red-300 bg-red-50 dark:text-red-400 dark:border-red-800 dark:bg-red-950", icon: XCircle },
+};
 
 const UsersPage = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -58,30 +89,28 @@ const UsersPage = () => {
   const [error, setError] = useState<string | null>(null);
   const { user: currentUser, isLoading: userLoading } = useUser();
   const router = useRouter();
-  const { getMyDistributors, getMyWholesalers, removeDistributor, removeWholesaler } = useSupplyChainContract();
 
-  // My on-chain participants (manufacturer only)
-  const [myDistributors, setMyDistributors] = useState<{ address: string; name: string; organization: string; dbId: number | null }[]>([]);
-  const [myWholesalers, setMyWholesalers] = useState<{ address: string; name: string; organization: string; dbId: number | null }[]>([]);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
+  // Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Removal state
-  const [removeTarget, setRemoveTarget] = useState<{ address: string; name: string; role: "distributor" | "wholesaler"; dbId: number | null } | null>(null);
-  const [removing, setRemoving] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const isAuthorized =
-    !userLoading &&
-    currentUser != null &&
-    ALLOWED_ROLES.includes(currentUser.role);
+  // Status-change state
+  const [statusChangeTarget, setStatusChangeTarget] = useState<{ user: User; newStatus: "active" | "rejected" } | null>(null);
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [statusChangeError, setStatusChangeError] = useState<string | null>(null);
 
-  // Client-side role guard — redirect unauthorized users
+  const isAuthorized = !userLoading && currentUser?.role === "admin";
+
+  // Redirect non-admins
   useEffect(() => {
-    if (
-      !userLoading &&
-      currentUser &&
-      !ALLOWED_ROLES.includes(currentUser.role)
-    ) {
+    if (!userLoading && currentUser && currentUser.role !== "admin") {
       router.replace("/dashboard");
     }
   }, [currentUser, userLoading, router]);
@@ -90,139 +119,106 @@ const UsersPage = () => {
     try {
       setLoading(true);
       setError(null);
-
       const { data } = await axios.get<User[]>("/api/user");
       setUsers(data);
     } catch (err) {
-      // Axios errors include message and response info
-      let errorMessage = "Failed to fetch users";
-      if (axios.isAxiosError(err)) {
-        if (err.response?.data?.error) {
-          errorMessage = err.response.data.error;
-        } else if (err.message) {
-          errorMessage = err.message;
-        }
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
+      let msg = "Failed to fetch users";
+      if (axios.isAxiosError(err) && err.response?.data?.error) {
+        msg = err.response.data.error;
       }
-      setError(errorMessage);
-      console.error("Error fetching users:", err);
+      setError(msg);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Fetch users only when authorized
   useEffect(() => {
-    if (isAuthorized) {
-      fetchUsers();
-    }
+    if (isAuthorized) fetchUsers();
   }, [isAuthorized, fetchUsers]);
 
-  // Fetch on-chain participants for manufacturers
-  const fetchMyParticipants = useCallback(async () => {
-    if (currentUser?.role !== "manufacturer") return;
-    setParticipantsLoading(true);
-    try {
-      const [distAddresses, wholAddresses] = await Promise.all([
-        getMyDistributors(),
-        getMyWholesalers(),
-      ]);
-
-      // Match addresses with DB users for display names
-      const res = await fetch("/api/user");
-      const dbUsers: { id: number; fullName: string; walletId: string; organization: string; status: string }[] =
-        res.ok ? await res.json() : [];
-
-      const matchAddr = (addr: string) => {
-        const u = dbUsers.find(
-          (u) => u.walletId.toLowerCase() === addr.toLowerCase() && u.status === "active"
-        );
-        return {
-          address: addr,
-          name: u?.fullName ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`,
-          organization: u?.organization ?? "Unknown",
-          dbId: u?.id ?? null,
-        };
-      };
-
-      setMyDistributors(distAddresses.map(matchAddr));
-      setMyWholesalers(wholAddresses.map(matchAddr));
-    } catch (err) {
-      console.error("Failed to fetch on-chain participants:", err);
-    } finally {
-      setParticipantsLoading(false);
+  // Filtered and paginated users
+  const filteredUsers = useMemo(() => {
+    let list = users;
+    if (roleFilter !== "all") list = list.filter((u) => u.role === roleFilter);
+    if (statusFilter !== "all") list = list.filter((u) => u.status === statusFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (u) =>
+          u.fullName.toLowerCase().includes(q) ||
+          u.email?.toLowerCase().includes(q) ||
+          u.organization.toLowerCase().includes(q) ||
+          u.walletId.toLowerCase().includes(q),
+      );
     }
-  }, [currentUser?.role, getMyDistributors, getMyWholesalers]);
+    return list;
+  }, [users, roleFilter, statusFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   useEffect(() => {
-    if (!isAuthorized || currentUser?.role !== "manufacturer") return;
-    fetchMyParticipants();
-  }, [isAuthorized, currentUser?.role, fetchMyParticipants]);
+    setCurrentPage(1);
+  }, [searchQuery, roleFilter, statusFilter]);
 
-  const handleRetry = () => {
-    fetchUsers();
-  };
+  // --- Handlers ---
 
-  const handleUserDeleted = () => {
-    fetchUsers();
-    if (currentUser?.role === "manufacturer") {
-      fetchMyParticipants();
-    }
-  };
-
-  const handleStatusChanged = () => {
-    fetchUsers();
-  };
-
-  /**
-   * Remove a distributor or wholesaler from both on-chain and off-chain.
-   * 1. Remove from blockchain via removeDistributor/removeWholesaler
-   * 2. Delete from database via DELETE /api/user/:id
-   * 3. Refresh both lists
-   */
-  const handleRemoveParticipant = async () => {
-    if (!removeTarget) return;
-    setRemoving(true);
-    setRemoveError(null);
+  const handleChangeStatus = async () => {
+    if (!statusChangeTarget) return;
+    setChangingStatus(true);
+    setStatusChangeError(null);
     try {
-      // Step 1: Remove from blockchain
-      if (removeTarget.role === "distributor") {
-        await removeDistributor(removeTarget.address);
-      } else {
-        await removeWholesaler(removeTarget.address);
-      }
-
-      // Step 2: Delete from database (if user exists in DB)
-      if (removeTarget.dbId) {
-        const response = await fetch(`/api/user/${removeTarget.dbId}`, {
-          method: "DELETE",
-        });
-        if (!response.ok) {
-          const data = await response.json();
-          // Log but don't block — on-chain removal already succeeded
-          console.warn("DB deletion warning:", data.error);
-        }
-      }
-
-      // Step 3: Refresh both lists
-      setRemoveTarget(null);
-      fetchMyParticipants();
-      fetchUsers();
+      await axios.patch(`/api/user/${statusChangeTarget.user.id}`, {
+        status: statusChangeTarget.newStatus,
+      });
+      setStatusChangeTarget(null);
+      await fetchUsers();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to remove participant";
-      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
-        setRemoveError("MetaMask transaction was rejected. The user was not removed.");
-      } else {
-        setRemoveError(message);
+      let msg = "Failed to change status";
+      if (axios.isAxiosError(err) && err.response?.data?.error) {
+        msg = err.response.data.error;
       }
+      setStatusChangeError(msg);
     } finally {
-      setRemoving(false);
+      setChangingStatus(false);
     }
   };
 
-  // --- Early returns (all hooks are above this point) ---
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await axios.delete(`/api/user/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      await fetchUsers();
+    } catch (err) {
+      let msg = "Failed to delete user";
+      if (axios.isAxiosError(err) && err.response?.data?.error) {
+        msg = err.response.data.error;
+      }
+      setDeleteError(msg);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
+  // --- Stats ---
+  const pendingCount = users.filter((u) => u.status === "pending").length;
+  const activeCount = users.filter((u) => u.status === "active").length;
+  const rejectedCount = users.filter((u) => u.status === "rejected").length;
+
+  const stats = [
+    { title: "Total Users", value: users.length, icon: UsersIcon, color: "text-blue-500" },
+    { title: "Active", value: activeCount, icon: UserCheck, color: "text-green-500" },
+    { title: "Pending", value: pendingCount, icon: Loader2, color: "text-yellow-500" },
+    { title: "Rejected", value: rejectedCount, icon: UserX, color: "text-red-500" },
+  ];
+
+  // --- Early returns ---
   if (userLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -232,314 +228,374 @@ const UsersPage = () => {
     );
   }
 
-  if (!currentUser || !ALLOWED_ROLES.includes(currentUser.role)) {
-    return null;
-  }
-
-  // Split users into active and pending
-  const activeUsers = users.filter((u) => u.status === "active");
-  const pendingUsers = users.filter((u) => u.status === "pending");
-
-  // Stats based on active users only
-  const stats = [
-    {
-      title: "Total Active",
-      value: activeUsers.length.toString(),
-      icon: UsersIcon,
-      color: "text-blue-500",
-    },
-    {
-      title: "Manufacturers",
-      value: activeUsers
-        .filter((u) => u.role === "manufacturer")
-        .length.toString(),
-      icon: UserCheck,
-      color: "text-green-500",
-    },
-    {
-      title: "Distributors",
-      value: activeUsers
-        .filter((u) => u.role === "distributor")
-        .length.toString(),
-      icon: Clock,
-      color: "text-orange-500",
-    },
-    {
-      title: "Wholesalers",
-      value: activeUsers
-        .filter((u) => u.role === "wholesaler")
-        .length.toString(),
-      icon: Store,
-      color: "text-purple-500",
-    },
-    {
-      title: "Pharmacists",
-      value: activeUsers
-        .filter((u) => u.role === "pharmacist")
-        .length.toString(),
-      icon: UserX,
-      color: "text-red-500",
-    },
-  ];
+  if (!isAuthorized) return null;
 
   return (
     <div className="p-6 bg-background space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage supply chain network users and approvals
-          </p>
-        </div>
-        {currentUser.role === "admin" && (
-          <AddUserDialog onUserAdded={fetchUsers} />
-        )}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+          <Shield className="h-7 w-7" />
+          User Management
+        </h1>
+        <p className="text-muted-foreground mt-2">
+          Approve, reject, or remove users from the supply chain network
+        </p>
       </div>
 
-      {/* Error Alert */}
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((s) => {
+          const Icon = s.icon;
+          return (
+            <Card key={s.title}>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{s.title}</p>
+                    <p className="text-2xl font-bold">{loading ? "…" : s.value}</p>
+                  </div>
+                  <Icon className={`h-6 w-6 ${s.color}`} />
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Error */}
       {error && (
         <Alert variant="destructive" className="border-red-500/50">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error Loading Users</AlertTitle>
+          <AlertTitle>Error</AlertTitle>
           <AlertDescription className="flex items-center justify-between">
             <span>{error}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-              className="ml-2 hover:bg-red-500/10"
-            >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Retry
+            <Button variant="outline" size="sm" onClick={fetchUsers} className="ml-2 hover:bg-red-500/10">
+              <RotateCcw className="h-4 w-4 mr-1" /> Retry
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-12">
-          <Spinner className="h-8 w-8 mb-3" />
-          <p className="text-muted-foreground">Loading users...</p>
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, email, organization, or wallet…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
         </div>
-      )}
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="Role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value="manufacturer">Manufacturer</SelectItem>
+            <SelectItem value="distributor">Distributor</SelectItem>
+            <SelectItem value="wholesaler">Wholesaler</SelectItem>
+            <SelectItem value="pharmacist">Pharmacist</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
-      {/* Content */}
-      {!loading && (
-        <>
-          {/* Pending Requests — shown to manufacturers (for their registrants) and admins */}
-          {(currentUser.role === "manufacturer" ||
-            currentUser.role === "admin") &&
-            pendingUsers.length > 0 && (
-              <PendingRequests
-                pendingUsers={pendingUsers as any}
-                onStatusChanged={handleStatusChanged}
-              />
-            )}
-
-          {/* My On-Chain Participants — manufacturer only */}
-          {currentUser.role === "manufacturer" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* My Distributors */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Truck className="h-5 w-5 text-blue-500" />
-                    My Distributors
-                  </CardTitle>
-                  <CardDescription>
-                    Distributors registered under your account on-chain
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {participantsLoading ? (
-                    <div className="flex items-center gap-2 text-muted-foreground py-4">
-                      <Spinner className="h-4 w-4" />
-                      Loading...
-                    </div>
-                  ) : myDistributors.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4">
-                      No distributors registered yet. Approve pending distributor requests to add them.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {myDistributors.map((d) => (
-                        <div
-                          key={d.address}
-                          className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                        >
-                          <div>
-                            <p className="font-medium text-sm">{d.name}</p>
-                            <p className="text-xs text-muted-foreground">{d.organization}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="font-mono text-xs">
-                              {d.address.slice(0, 6)}...{d.address.slice(-4)}
-                            </Badge>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
-                                    onClick={() => {
-                                      setRemoveError(null);
-                                      setRemoveTarget({ address: d.address, name: d.name, role: "distributor", dbId: d.dbId });
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Remove distributor</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* My Wholesalers */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building2 className="h-5 w-5 text-purple-500" />
-                    My Wholesalers
-                  </CardTitle>
-                  <CardDescription>
-                    Wholesalers registered under your account on-chain
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {participantsLoading ? (
-                    <div className="flex items-center gap-2 text-muted-foreground py-4">
-                      <Spinner className="h-4 w-4" />
-                      Loading...
-                    </div>
-                  ) : myWholesalers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4">
-                      No wholesalers registered yet. Approve pending wholesaler requests to add them.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {myWholesalers.map((w) => (
-                        <div
-                          key={w.address}
-                          className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                        >
-                          <div>
-                            <p className="font-medium text-sm">{w.name}</p>
-                            <p className="text-xs text-muted-foreground">{w.organization}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="font-mono text-xs">
-                              {w.address.slice(0, 6)}...{w.address.slice(-4)}
-                            </Badge>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
-                                    onClick={() => {
-                                      setRemoveError(null);
-                                      setRemoveTarget({ address: w.address, name: w.name, role: "wholesaler", dbId: w.dbId });
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Remove wholesaler</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+      {/* Users Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            All Users
+            <Badge variant="secondary" className="ml-1">{filteredUsers.length}</Badge>
+          </CardTitle>
+          <CardDescription>
+            Manage user accounts — approve pending registrations, reject or remove users
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Spinner className="h-6 w-6 mb-2" />
+              <p className="text-muted-foreground text-sm">Loading users…</p>
             </div>
+          ) : paginatedUsers.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {searchQuery || roleFilter !== "all" || statusFilter !== "all"
+                ? "No users match your filters."
+                : "No users found."}
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-3 font-medium">Name</th>
+                      <th className="text-left p-3 font-medium">Organization</th>
+                      <th className="text-left p-3 font-medium">Role</th>
+                      <th className="text-left p-3 font-medium">Email</th>
+                      <th className="text-left p-3 font-medium">Wallet</th>
+                      <th className="text-left p-3 font-medium">Status</th>
+                      <th className="text-right p-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedUsers.map((u) => {
+                      const statusConf = STATUS_BADGE_MAP[u.status];
+                      const StatusIcon = statusConf.icon;
+                      const isSelf = u.id === currentUser!.id;
+
+                      return (
+                        <tr key={u.id} className="border-b hover:bg-muted/30 transition-colors">
+                          <td className="p-3 font-medium">
+                            {u.fullName}
+                            {isSelf && (
+                              <span className="text-xs text-muted-foreground ml-1">(you)</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-muted-foreground">{u.organization}</td>
+                          <td className="p-3">
+                            <Badge variant="outline" className={`capitalize ${ROLE_BADGE_MAP[u.role] ?? ""}`}>
+                              {u.role}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-muted-foreground">{u.email ?? "—"}</td>
+                          <td className="p-3">
+                            <Badge variant="secondary" className="font-mono text-xs">
+                              {u.walletId.slice(0, 6)}…{u.walletId.slice(-4)}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            <Badge variant="outline" className={`flex items-center gap-1 w-fit capitalize ${statusConf.className}`}>
+                              <StatusIcon className={`h-3 w-3 ${u.status === "pending" ? "animate-spin" : ""}`} />
+                              {u.status}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Approve button — shown for pending users */}
+                              {u.status === "pending" && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-500/10"
+                                        onClick={() => {
+                                          setStatusChangeError(null);
+                                          setStatusChangeTarget({ user: u, newStatus: "active" });
+                                        }}
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Approve user</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+
+                              {/* Reject button — shown for pending or active users (not self) */}
+                              {(u.status === "pending" || u.status === "active") && !isSelf && u.role !== "admin" && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-yellow-600 hover:text-yellow-700 hover:bg-yellow-500/10"
+                                        onClick={() => {
+                                          setStatusChangeError(null);
+                                          setStatusChangeTarget({ user: u, newStatus: "rejected" });
+                                        }}
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Reject user</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+
+                              {/* Re-activate button — shown for rejected users */}
+                              {u.status === "rejected" && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-500/10"
+                                        onClick={() => {
+                                          setStatusChangeError(null);
+                                          setStatusChangeTarget({ user: u, newStatus: "active" });
+                                        }}
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Re-activate user</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+
+                              {/* Delete button — not shown for self or other admins */}
+                              {!isSelf && u.role !== "admin" && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                                        onClick={() => {
+                                          setDeleteError(null);
+                                          setDeleteTarget(u);
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Delete user</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages} ({filteredUsers.length} results)
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
+        </CardContent>
+      </Card>
 
-          {/* Active Users List */}
-          <Card>
-            <CardHeader>
-              <CardTitle>All Users</CardTitle>
-              <CardDescription>Active network users</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <UserFiltersClient
-                users={activeUsers}
-                callerRole={currentUser.role}
-                onDelete={handleUserDeleted}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            {stats.map((stat) => {
-              const Icon = stat.icon;
-              return (
-                <Card key={stat.title} className="h-18">
-                  <CardContent>
-                    <div className="text-sm font-medium flex items-center justify-between">
-                      <div className="text-foreground font-semibold text-lg flex items-center gap-2">
-                        {stat.title}
-                        {":"}
-                        <span className="text-base font-bold">
-                          {stat.value}
-                        </span>
-                      </div>
-                      <Icon className={`h-5 w-5 ${stat.color}`} />
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {/* Remove Participant Confirmation Dialog */}
-      <AlertDialog open={!!removeTarget} onOpenChange={(open) => { if (!open) setRemoveTarget(null); }}>
+      {/* Status Change Confirmation */}
+      <AlertDialog
+        open={!!statusChangeTarget}
+        onOpenChange={(open) => { if (!open) setStatusChangeTarget(null); }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {removeTarget?.role === "distributor" ? "Distributor" : "Wholesaler"}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {statusChangeTarget?.newStatus === "active" ? "Approve" : "Reject"} User
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove{" "}
-              <span className="font-semibold text-foreground">{removeTarget?.name}</span>
-              ? This will remove them from both the blockchain and the database. This action cannot be undone.
+              Are you sure you want to{" "}
+              {statusChangeTarget?.newStatus === "active" ? "approve" : "reject"}{" "}
+              <span className="font-semibold text-foreground">{statusChangeTarget?.user.fullName}</span>?
+              {statusChangeTarget?.newStatus === "active"
+                ? " This will allow them to log in and use the platform."
+                : " This will prevent them from logging in."}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          {removeError && (
-            <p className="text-sm text-red-500 px-1">{removeError}</p>
+          {statusChangeError && (
+            <p className="text-sm text-red-500 px-1">{statusChangeError}</p>
           )}
 
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={removing} onClick={() => setRemoveTarget(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={changingStatus} onClick={() => setStatusChangeTarget(null)}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleRemoveParticipant();
-              }}
-              disabled={removing}
+              onClick={(e) => { e.preventDefault(); handleChangeStatus(); }}
+              disabled={changingStatus}
+              className={
+                statusChangeTarget?.newStatus === "active"
+                  ? "bg-green-600 hover:bg-green-700 focus:ring-green-600"
+                  : "bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-600"
+              }
+            >
+              {changingStatus ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing…</>
+              ) : statusChangeTarget?.newStatus === "active" ? (
+                "Approve"
+              ) : (
+                "Reject"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete{" "}
+              <span className="font-semibold text-foreground">{deleteTarget?.fullName}</span>?
+              This will remove the user and clean up all their associated data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {deleteError && (
+            <p className="text-sm text-red-500 px-1">{deleteError}</p>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting} onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDeleteUser(); }}
+              disabled={deleting}
               className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
             >
-              {removing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Removing...
-                </>
+              {deleting ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting…</>
               ) : (
-                "Remove"
+                "Delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -333,16 +333,16 @@ export default function ProductDetailPage() {
       // Fetch active wholesaler users from DB, scoped to manufacturer hierarchy
       const res = await fetch("/api/user");
       if (res.ok) {
-        const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string; manufacturerId: number | null }[] = await res.json();
+        const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string }[] = await res.json();
         let wholesalerList = dbUsers.filter(
           (u) => (u.role === "wholesaler" || u.role === "pharmacist") && u.status === "active" && u.walletId
         );
 
         // Scope wholesalers to the same manufacturer hierarchy.
-        // Use the product's manufacturerId first (always set), then fall back to the distributor's manufacturerId.
-        const mfrId = product?.manufacturerId ?? user?.manufacturerId;
+        // Use the product's manufacturerId to scope wholesalers.
+        const mfrId = product?.manufacturerId;
         if (mfrId) {
-          const scoped = wholesalerList.filter((u) => u.manufacturerId === mfrId);
+          const scoped = wholesalerList.filter((u) => u.id !== mfrId);
           if (scoped.length > 0) {
             wholesalerList = scoped;
           }

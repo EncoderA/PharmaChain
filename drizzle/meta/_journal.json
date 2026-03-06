@@ -36,6 +36,13 @@
       "when": 1772561223523,
       "tag": "0004_thin_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1772616933431,
+      "tag": "0005_light_xavin",
+      "breakpoints": true
     }
   ]
 }

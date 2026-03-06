@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
 import { usersTable } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { hashPassword, createToken, setAuthCookie } from "@/lib/auth";
 
 export async function POST(req: Request) {
@@ -31,37 +31,6 @@ export async function POST(req: Request) {
         { error: "Invalid role" },
         { status: 400 },
       );
-    }
-
-    // Distributors and pharmacists must select a manufacturer
-    const needsManufacturer = body.role === "distributor" || body.role === "pharmacist" || body.role === "wholesaler";
-
-    if (needsManufacturer) {
-      if (!body.manufacturerId) {
-        return NextResponse.json(
-          { error: "You must select a manufacturer" },
-          { status: 400 },
-        );
-      }
-
-      // Verify the manufacturer exists and is active
-      const manufacturer = await db
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(
-          and(
-            eq(usersTable.id, Number(body.manufacturerId)),
-            eq(usersTable.role, "manufacturer"),
-            eq(usersTable.status, "active"),
-          ),
-        );
-
-      if (manufacturer.length === 0) {
-        return NextResponse.json(
-          { error: "Selected manufacturer not found or is not active" },
-          { status: 400 },
-        );
-      }
     }
 
     // Validate password length
@@ -102,8 +71,6 @@ export async function POST(req: Request) {
     const hashedPassword = await hashPassword(body.password);
 
     // Determine status: manufacturers are active immediately, others need approval
-    // (On-chain: manufacturer already self-registered via MetaMask,
-    //  distributor/wholesaler already sent on-chain request from the client)
     const status = body.role === "manufacturer" ? "active" : "pending";
 
     // Create user
@@ -118,7 +85,6 @@ export async function POST(req: Request) {
         phone: body.phone,
         walletId: body.walletId,
         status,
-        manufacturerId: needsManufacturer ? Number(body.manufacturerId) : null,
       })
       .returning({
         id: usersTable.id,
@@ -152,7 +118,7 @@ export async function POST(req: Request) {
         user,
         pending: true,
         message:
-          "Registration submitted successfully. Your on-chain request has been sent and your account is pending approval from the manufacturer.",
+          "Registration submitted successfully. Your account is pending approval.",
       },
       { status: 201 },
     );
@@ -164,3 +130,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

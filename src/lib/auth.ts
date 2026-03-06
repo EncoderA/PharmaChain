@@ -96,7 +96,6 @@ export type AuthUser = {
   role: "manufacturer" | "distributor" | "pharmacist" | "wholesaler" | "admin";
   walletId: string;
   status: "active" | "pending" | "rejected";
-  manufacturerId: number | null;
 };
 
 /**
@@ -120,7 +119,6 @@ export async function getAuthUser(): Promise<AuthUser | null> {
       role: usersTable.role,
       walletId: usersTable.walletId,
       status: usersTable.status,
-      manufacturerId: usersTable.manufacturerId,
     })
     .from(usersTable)
     .where(eq(usersTable.id, payload.userId));

@@ -18,7 +18,6 @@ export type User = {
   role: "manufacturer" | "distributor" | "pharmacist" | "wholesaler" | "admin";
   walletId: string;
   status: "active" | "pending" | "rejected";
-  manufacturerId: number | null;
 };
 
 interface UserContextValue {

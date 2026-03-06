@@ -25,45 +25,14 @@ import { CheckCircle2 } from "lucide-react";
 import axios from "axios";
 import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
-interface Manufacturer {
-  id: number;
-  fullName: string;
-  organization: string;
-  walletId: string;
-}
-
 export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState("");
-  const [manufacturerId, setManufacturerId] = useState("");
-  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
-  const [loadingManufacturers, setLoadingManufacturers] = useState(false);
   const [pendingSuccess, setPendingSuccess] = useState(false);
   const router = useRouter();
   const { refreshUser } = useUser();
   const { registerAsManufacturer } = useSupplyChainContract();
-
-  const needsManufacturer = role === "distributor" || role === "pharmacist" || role === "wholesaler";
-
-  // Fetch manufacturers when a role that needs approval is selected
-  useEffect(() => {
-    if (needsManufacturer && manufacturers.length === 0) {
-      setLoadingManufacturers(true);
-      axios
-        .get("/api/manufacturers")
-        .then((res) => setManufacturers(res.data))
-        .catch(() => setManufacturers([]))
-        .finally(() => setLoadingManufacturers(false));
-    }
-  }, [needsManufacturer, manufacturers.length]);
-
-  // Reset manufacturer selection when role changes
-  useEffect(() => {
-    if (!needsManufacturer) {
-      setManufacturerId("");
-    }
-  }, [needsManufacturer]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -81,10 +50,6 @@ export function RegisterForm() {
       walletId: formData.get("walletId") as string,
     };
 
-    if (needsManufacturer) {
-      data.manufacturerId = manufacturerId;
-    }
-
     // Client-side validation
     if (!data.fullName || !data.email || !data.password || !data.role || !data.organization || !data.phone) {
       setError("Please fill in all required fields");
@@ -94,12 +59,6 @@ export function RegisterForm() {
 
     if (!data.walletId) {
       setError("Wallet address is required");
-      setLoading(false);
-      return;
-    }
-
-    if (needsManufacturer && !data.manufacturerId) {
-      setError("Please select a manufacturer");
       setLoading(false);
       return;
     }
@@ -122,8 +81,6 @@ export function RegisterForm() {
       if (role === "manufacturer") {
         await registerAsManufacturer();
       }
-      // Distributors/Pharmacists are registered on-chain later when the manufacturer approves them.
-      // At this point they only create an off-chain pending record.
 
       // Step 2: Save off-chain details to database
       const res = await axios.post("/api/auth/register", data);
@@ -163,9 +120,9 @@ export function RegisterForm() {
             </div>
             <CardTitle className="text-xl">Registration Submitted</CardTitle>
             <CardDescription className="text-base mt-2">
-              Your registration request has been submitted on-chain and is
-              pending approval from the manufacturer. You will be able to log in
-              once your account is approved.
+              Your registration request has been submitted and is pending
+              approval. You will be able to log in once your account is
+              approved.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -265,40 +222,6 @@ export function RegisterForm() {
                 </Select>
               </div>
 
-              {/* Manufacturer Selection — shown only for distributor/pharmacist */}
-              {needsManufacturer && (
-                <div className="grid gap-2">
-                  <Label>Select Manufacturer</Label>
-                  {loadingManufacturers ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                      <Spinner className="h-4 w-4" />
-                      Loading manufacturers...
-                    </div>
-                  ) : manufacturers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-2">
-                      No manufacturers available. Please try again later.
-                    </p>
-                  ) : (
-                    <Select
-                      onValueChange={setManufacturerId}
-                      value={manufacturerId}
-                      required
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a manufacturer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {manufacturers.map((m) => (
-                          <SelectItem key={m.id} value={String(m.id)}>
-                            {m.organization} ({m.fullName})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              )}
-
               {/* Organization */}
               <div className="grid gap-2">
                 <Label htmlFor="organization">Company / Organization</Label>
@@ -321,7 +244,7 @@ export function RegisterForm() {
                 />
               </div>
 
-              {/* Wallet Address — required for all roles */}
+              {/* Wallet Address */}
               <div className="grid gap-2">
                 <Label htmlFor="walletId">
                   Wallet Address
@@ -336,8 +259,6 @@ export function RegisterForm() {
                 <p className="text-xs text-muted-foreground">
                   {role === "manufacturer"
                     ? "Your wallet will be registered on-chain via MetaMask."
-                    : needsManufacturer
-                    ? "Your wallet will be registered on-chain when the manufacturer approves your request."
                     : "Connect your MetaMask wallet to get your address."}
                 </p>
               </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
-import { usersTable } from "@/db/schema";
-import { and, eq, or } from "drizzle-orm";
+import { usersTable, supplyChainRelationsTable } from "@/db/schema";
+import { and, eq, or, inArray } from "drizzle-orm";
 import { hashPassword, getAuthUser } from "@/lib/auth";
 
 const ALLOWED_ROLES = ["admin", "manufacturer", "distributor", "pharmacist", "wholesaler"];
@@ -16,7 +16,6 @@ const userColumns = {
   role: usersTable.role,
   walletId: usersTable.walletId,
   status: usersTable.status,
-  manufacturerId: usersTable.manufacturerId,
 };
 
 export async function GET(req: Request) {
@@ -64,22 +63,36 @@ export async function GET(req: Request) {
         // Admins see all users
         allUsers = await db.select(userColumns).from(usersTable);
       } else if (authUser.role === "manufacturer") {
-        // Manufacturers see: all active users + pending/rejected users who registered under them
-        allUsers = await db
-          .select(userColumns)
-          .from(usersTable)
-          .where(
-            or(
-              eq(usersTable.status, "active"),
-              and(
-                eq(usersTable.manufacturerId, authUser.id),
-                or(
-                  eq(usersTable.status, "pending"),
-                  eq(usersTable.status, "rejected"),
+        // Manufacturers see: all active users + pending/rejected users related to them via supply_chain_relations
+        const relatedUserIds = await db
+          .select({ supplyTo: supplyChainRelationsTable.supplyTo })
+          .from(supplyChainRelationsTable)
+          .where(eq(supplyChainRelationsTable.supplyFrom, authUser.id));
+
+        const relatedIds = relatedUserIds.map((r) => r.supplyTo);
+
+        if (relatedIds.length > 0) {
+          allUsers = await db
+            .select(userColumns)
+            .from(usersTable)
+            .where(
+              or(
+                eq(usersTable.status, "active"),
+                and(
+                  inArray(usersTable.id, relatedIds),
+                  or(
+                    eq(usersTable.status, "pending"),
+                    eq(usersTable.status, "rejected"),
+                  ),
                 ),
               ),
-            ),
-          );
+            );
+        } else {
+          allUsers = await db
+            .select(userColumns)
+            .from(usersTable)
+            .where(eq(usersTable.status, "active"));
+        }
       } else {
         // Distributors see only active users (needed for transfer dialogs)
         allUsers = await db
@@ -186,3 +199,6 @@ export async function POST(req: Request) {
     );
   }
 }
+
+
+

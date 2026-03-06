@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
-import { usersTable, productsTable, transactionsTable } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { usersTable, productsTable, transactionsTable, supplyChainRelationsTable } from "@/db/schema";
+import { eq, or } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 
 /**
  * PATCH /api/user/[id]
  * Update a user's status (approve / reject).
- * - Manufacturers can approve/reject users who registered under them.
+ * - Manufacturers can approve/reject users related to them via supply_chain_relations.
  * - Admins can approve/reject anyone.
  */
 export async function PATCH(
@@ -44,7 +44,6 @@ export async function PATCH(
         fullName: usersTable.fullName,
         role: usersTable.role,
         status: usersTable.status,
-        manufacturerId: usersTable.manufacturerId,
         walletId: usersTable.walletId,
       })
       .from(usersTable)
@@ -56,21 +55,29 @@ export async function PATCH(
 
     const target = targets[0];
 
-    // Only pending users can be approved/rejected
-    if (target.status !== "pending") {
+    // Only pending users can be approved/rejected by non-admins
+    // Admins can change any user's status (active ↔ rejected, pending → active/rejected)
+    if (authUser.role !== "admin" && target.status !== "pending") {
       return NextResponse.json(
         { error: `User is already ${target.status}` },
         { status: 400 },
       );
     }
 
-    // Authorization: admins can approve anyone; manufacturers can approve their own registrants
+    // Authorization: admins can approve anyone; manufacturers can approve users related to them
     if (authUser.role === "admin") {
       // Admin can approve/reject anyone — allowed
     } else if (authUser.role === "manufacturer") {
-      if (target.manufacturerId !== authUser.id) {
+      // Check if target user is related to this manufacturer via supply_chain_relations
+      const relatedToIds = (await db
+        .select({ supplyTo: supplyChainRelationsTable.supplyTo })
+        .from(supplyChainRelationsTable)
+        .where(eq(supplyChainRelationsTable.supplyFrom, authUser.id))
+      ).map((r) => r.supplyTo);
+
+      if (!relatedToIds.includes(userId)) {
         return NextResponse.json(
-          { error: "You can only approve users who registered under you" },
+          { error: "You can only approve users related to you" },
           { status: 403 },
         );
       }
@@ -136,7 +143,6 @@ export async function DELETE(
       .select({
         id: usersTable.id,
         role: usersTable.role,
-        manufacturerId: usersTable.manufacturerId,
       })
       .from(usersTable)
       .where(eq(usersTable.id, userId));
@@ -153,19 +159,27 @@ export async function DELETE(
       );
     }
 
-    // Manufacturers can only delete distributors/wholesalers/pharmacists registered under them
+    // Manufacturers can only delete distributors/wholesalers/pharmacists related to them
     if (authUser.role === "manufacturer") {
       const target = existing[0];
       const allowedRoles = ["distributor", "wholesaler", "pharmacist"];
       if (!allowedRoles.includes(target.role)) {
         return NextResponse.json(
-          { error: "Manufacturers can only delete distributors and wholesalers registered under them" },
+          { error: "Manufacturers can only delete distributors, wholesalers, and pharmacists" },
           { status: 403 },
         );
       }
-      if (target.manufacturerId !== authUser.id) {
+
+      // Check relation exists
+      const relatedToIds = (await db
+        .select({ supplyTo: supplyChainRelationsTable.supplyTo })
+        .from(supplyChainRelationsTable)
+        .where(eq(supplyChainRelationsTable.supplyFrom, authUser.id))
+      ).map((r) => r.supplyTo);
+
+      if (!relatedToIds.includes(userId)) {
         return NextResponse.json(
-          { error: "You can only delete users registered under your account" },
+          { error: "You can only delete users related to your account" },
           { status: 403 },
         );
       }
@@ -196,11 +210,15 @@ export async function DELETE(
       .set({ toUserId: null })
       .where(eq(transactionsTable.toUserId, userId));
 
-    // Users: nullify manufacturerId for any users registered under this user
+    // Supply chain relations: delete all relations involving this user
     await db
-      .update(usersTable)
-      .set({ manufacturerId: null })
-      .where(eq(usersTable.manufacturerId, userId));
+      .delete(supplyChainRelationsTable)
+      .where(
+        or(
+          eq(supplyChainRelationsTable.supplyFrom, userId),
+          eq(supplyChainRelationsTable.supplyTo, userId),
+        ),
+      );
 
     // Now safe to delete
     await db.delete(usersTable).where(eq(usersTable.id, userId));

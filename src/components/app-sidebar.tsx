@@ -8,6 +8,7 @@ import {
   Settings,
   LayoutDashboard,
   User,
+  Link2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -69,7 +70,14 @@ const navItems: NavItem[] = [
     name: "User Management",
     url: "/users",
     icon: User,
-    allowedRoles: ["admin", "manufacturer"],
+    allowedRoles: ["admin"],
+  },
+  {
+    title: "My Buyers",
+    name: "My Buyers",
+    url: "/buyers",
+    icon: Link2,
+    allowedRoles: ["manufacturer", "distributor"],
   },
 ];
 

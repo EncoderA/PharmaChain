@@ -47,7 +47,15 @@ export const usersTable = pgTable("users", {
   walletId: varchar({ length: 50 }).notNull(),
   password: varchar({ length: 255 }), // nullable — existing users have no password yet
   status: userStatusEnum("status").default("pending").notNull(),
-  manufacturerId: integer("manufacturer_id"), // FK to usersTable.id — the manufacturer this user registered under
+});
+
+// ==================== SUPPLY CHAIN RELATIONS ====================
+
+export const supplyChainRelationsTable = pgTable("supply_chain_relations", {
+  id: serial("id").primaryKey(),
+  supplyFrom: integer("supply_from").references(() => usersTable.id).notNull(),
+  supplyTo: integer("supply_to").references(() => usersTable.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // ==================== PRODUCTS ====================
