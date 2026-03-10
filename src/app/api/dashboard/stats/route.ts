@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
-import { productsTable, transactionsTable, usersTable } from "@/db/schema";
+import {
+  productsTable,
+  transactionsTable,
+  usersTable,
+  supplyChainRelationsTable,
+} from "@/db/schema";
 import { eq, sql, count, or, and } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
+import { alias } from "drizzle-orm/pg-core";
 
 export async function GET() {
   try {
@@ -99,6 +105,80 @@ export async function GET() {
       roleMap[row.role] = row.count;
     }
 
+    // Pending users count (for admin dashboard)
+    const [pendingUserCount] = await db
+      .select({ count: count() })
+      .from(usersTable)
+      .where(eq(usersTable.status, "pending"));
+
+    // ==================== RECENT PRODUCTS (5) ====================
+    const recentProductsQuery = db
+      .select({
+        id: productsTable.id,
+        productCode: productsTable.productCode,
+        name: productsTable.name,
+        category: productsTable.category,
+        batch: productsTable.batch,
+        stock: productsTable.stock,
+        status: productsTable.status,
+        manufacturerName: usersTable.fullName,
+        createdAt: productsTable.createdAt,
+      })
+      .from(productsTable)
+      .leftJoin(usersTable, eq(productsTable.manufacturerId, usersTable.id))
+      .orderBy(sql`${productsTable.createdAt} DESC`)
+      .limit(5);
+    if (productFilter) recentProductsQuery.where(productFilter);
+    const recentProducts = await recentProductsQuery;
+
+    // ==================== RECENT TRANSACTIONS (5) ====================
+    const fromUser = alias(usersTable, "from_user");
+    const toUser = alias(usersTable, "to_user");
+
+    const recentTxQuery = db
+      .select({
+        id: transactionsTable.id,
+        action: transactionsTable.action,
+        status: transactionsTable.status,
+        txHash: transactionsTable.txHash,
+        createdAt: transactionsTable.createdAt,
+        productName: productsTable.name,
+        productCode: productsTable.productCode,
+        fromUserName: fromUser.fullName,
+        toUserName: toUser.fullName,
+      })
+      .from(transactionsTable)
+      .leftJoin(productsTable, eq(transactionsTable.productId, productsTable.id))
+      .leftJoin(fromUser, eq(transactionsTable.fromUserId, fromUser.id))
+      .leftJoin(toUser, eq(transactionsTable.toUserId, toUser.id))
+      .orderBy(sql`${transactionsTable.createdAt} DESC`)
+      .limit(5);
+    if (txFilter) recentTxQuery.where(txFilter);
+    const recentTransactions = await recentTxQuery;
+
+    // ==================== SUPPLY CHAIN SUMMARY ====================
+    let supplyChainSummary: { totalRelations: number; downstreamCount: number; upstreamCount: number } = {
+      totalRelations: 0,
+      downstreamCount: 0,
+      upstreamCount: 0,
+    };
+
+    if (user.role === "admin") {
+      const [relCount] = await db.select({ count: count() }).from(supplyChainRelationsTable);
+      supplyChainSummary.totalRelations = relCount.count;
+    } else {
+      const [downstreamCount] = await db
+        .select({ count: count() })
+        .from(supplyChainRelationsTable)
+        .where(eq(supplyChainRelationsTable.supplyFrom, user.id));
+      const [upstreamCount] = await db
+        .select({ count: count() })
+        .from(supplyChainRelationsTable)
+        .where(eq(supplyChainRelationsTable.supplyTo, user.id));
+      supplyChainSummary.downstreamCount = downstreamCount.count;
+      supplyChainSummary.upstreamCount = upstreamCount.count;
+    }
+
     return NextResponse.json({
       products: {
         total: productCount.count,
@@ -115,12 +195,16 @@ export async function GET() {
       },
       users: {
         total: userCount.count,
+        pending: pendingUserCount.count,
         manufacturers: roleMap["manufacturer"] ?? 0,
         distributors: roleMap["distributor"] ?? 0,
         pharmacists: roleMap["pharmacist"] ?? 0,
         wholesalers: roleMap["wholesaler"] ?? 0,
         admins: roleMap["admin"] ?? 0,
       },
+      recentProducts,
+      recentTransactions,
+      supplyChainSummary,
     });
   } catch (error) {
     console.error("Error fetching dashboard stats:", error);
