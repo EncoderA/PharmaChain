@@ -15,12 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  CheckIcon,
-  PlusIcon,
   QrCode,
-  ShoppingCart,
   Verified,
-  WarehouseIcon,
   Loader2,
   AlertCircle,
   Factory,
@@ -30,39 +26,16 @@ import {
   XCircle,
   CheckCircle,
   ArrowRight,
-  Package,
-  ArrowDownToLine,
-  ArrowUpFromLine,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import Calendar27 from "./BarChart";
 import { useSupplyChainContract, Stage } from "@/hooks/use-supply-chain-contract";
 import type { DrugStruct } from "@/hooks/use-supply-chain-contract";
 import { useUser } from "@/contexts/user-context";
 
-interface DashboardStats {
-  products: {
-    total: number;
-    verified: number;
-    pending: number;
-    expired: number;
-    lowStock: number;
-  };
-  transactions: {
-    total: number;
-    confirmed: number;
-    pending: number;
-    failed: number;
-  };
-  users: {
-    total: number;
-    manufacturers: number;
-    distributors: number;
-    pharmacists: number;
-    wholesalers: number;
-    admins: number;
-  };
-}
+import AdminDashboard from "@/components/dashboard/admin-dashboard";
+import ManufacturerDashboard from "@/components/dashboard/manufacturer-dashboard";
+import DistributorDashboard from "@/components/dashboard/distributor-dashboard";
+import WholesalerDashboard from "@/components/dashboard/wholesaler-dashboard";
 
 interface JourneyStep {
   address: string;
@@ -85,8 +58,6 @@ const stageIcons: Record<number, typeof Factory> = {
 };
 
 export default function SupplyChainDashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
   const { user } = useUser();
 
   // Track Product state
@@ -120,23 +91,6 @@ export default function SupplyChainDashboard() {
 
   const { getDrugDetails, getDrugJourney, verifyDrugByQR } =
     useSupplyChainContract();
-
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        const res = await fetch("/api/dashboard/stats");
-        if (res.ok) {
-          const data = await res.json();
-          setStats(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch dashboard stats:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchStats();
-  }, []);
 
   /** Auto-fetch QR hash when drug ID changes in the Verify dialog */
   useEffect(() => {
@@ -346,252 +300,27 @@ export default function SupplyChainDashboard() {
     });
   };
 
-  // Role-aware stat cards
-  const getStatCards = () => {
-    const role = user?.role;
-
-    if (role === "distributor") {
-      return [
-        {
-          label: "My Inventory",
-          value: stats?.products.total ?? 0,
-          icon: Package,
-        },
-        {
-          label: "My Transactions",
-          value: stats?.transactions.total ?? 0,
-          icon: Truck,
-        },
-        {
-          label: "Forwarded",
-          value: stats?.transactions.confirmed ?? 0,
-          icon: ArrowUpFromLine,
-        },
-      ];
+  // Render the role-specific dashboard
+  const renderDashboard = () => {
+    switch (user?.role) {
+      case "admin":
+        return <AdminDashboard />;
+      case "manufacturer":
+        return <ManufacturerDashboard />;
+      case "distributor":
+        return <DistributorDashboard />;
+      case "wholesaler":
+      case "pharmacist":
+        return <WholesalerDashboard />;
+      default:
+        return <AdminDashboard />;
     }
-
-    if (role === "pharmacist") {
-      return [
-        {
-          label: "My Inventory",
-          value: stats?.products.total ?? 0,
-          icon: Package,
-        },
-        {
-          label: "My Transactions",
-          value: stats?.transactions.total ?? 0,
-          icon: Truck,
-        },
-        {
-          label: "Products Sold",
-          value: stats?.transactions.confirmed ?? 0,
-          icon: Store,
-        },
-      ];
-    }
-
-    if (role === "wholesaler") {
-      return [
-        {
-          label: "My Inventory",
-          value: stats?.products.total ?? 0,
-          icon: Package,
-        },
-        {
-          label: "My Transactions",
-          value: stats?.transactions.total ?? 0,
-          icon: Truck,
-        },
-        {
-          label: "Products Sold",
-          value: stats?.transactions.confirmed ?? 0,
-          icon: Store,
-        },
-      ];
-    }
-
-    if (role === "manufacturer") {
-      return [
-        {
-          label: "My Products",
-          value: stats?.products.total ?? 0,
-          icon: Factory,
-        },
-        {
-          label: "My Transactions",
-          value: stats?.transactions.total ?? 0,
-          icon: Truck,
-        },
-        {
-          label: "Active Users",
-          value: stats?.users.total ?? 0,
-          icon: CheckCircle,
-        },
-      ];
-    }
-
-    // Admin — global view
-    return [
-      {
-        label: "Total Products",
-        value: stats?.products.total ?? 0,
-        icon: Package,
-      },
-      {
-        label: "Transactions Processed",
-        value: stats?.transactions.total ?? 0,
-        icon: Truck,
-      },
-      {
-        label: "Active Users",
-        value: stats?.users.total ?? 0,
-        icon: CheckCircle,
-      },
-    ];
   };
-
-  // Role-aware activity items
-  const getActivities = () => {
-    const role = user?.role;
-
-    if (role === "distributor") {
-      return [
-        {
-          icon: <ArrowDownToLine />,
-          title: "Products in Inventory",
-          detail: `${stats?.products.total ?? 0} products currently held`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <CheckIcon />,
-          title: "Verified Products",
-          detail: `${stats?.products.verified ?? 0} verified in inventory`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <ArrowUpFromLine />,
-          title: "Transactions Confirmed",
-          detail: `${stats?.transactions.confirmed ?? 0} transfers confirmed`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <AlertCircle />,
-          title: "Pending Transactions",
-          detail: `${stats?.transactions.pending ?? 0} awaiting confirmation`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <XCircle />,
-          title: "Expired Products",
-          detail: `${stats?.products.expired ?? 0} expired / rejected`,
-          color: "bg-primary/20 text-primary",
-          isLast: true,
-        },
-      ];
-    }
-
-    if (role === "pharmacist") {
-      return [
-        {
-          icon: <Package />,
-          title: "Products in Stock",
-          detail: `${stats?.products.total ?? 0} products on hand`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <ShoppingCart />,
-          title: "Products Verified",
-          detail: `${stats?.products.verified ?? 0} verified products`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <WarehouseIcon />,
-          title: "Transactions Confirmed",
-          detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <CheckIcon />,
-          title: "Low Stock Alerts",
-          detail: `${stats?.products.lowStock ?? 0} products with low stock`,
-          color: "bg-primary/20 text-primary",
-          isLast: true,
-        },
-      ];
-    }
-
-    if (role === "wholesaler") {
-      return [
-        {
-          icon: <Package />,
-          title: "Products in Stock",
-          detail: `${stats?.products.total ?? 0} products on hand`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <ShoppingCart />,
-          title: "Products Verified",
-          detail: `${stats?.products.verified ?? 0} verified products`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <WarehouseIcon />,
-          title: "Transactions Confirmed",
-          detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
-          color: "bg-primary/20 text-primary",
-        },
-        {
-          icon: <CheckIcon />,
-          title: "Low Stock Alerts",
-          detail: `${stats?.products.lowStock ?? 0} products with low stock`,
-          color: "bg-primary/20 text-primary",
-          isLast: true,
-        },
-      ];
-    }
-
-    // Admin and Manufacturer — original activity set
-    return [
-      {
-        icon: <PlusIcon />,
-        title: "Product Added",
-        detail: `${stats?.products.pending ?? 0} pending verification`,
-        color: "bg-primary/20 text-primary",
-      },
-      {
-        icon: <ShoppingCart />,
-        title: "Products Verified",
-        detail: `${stats?.products.verified ?? 0} verified products`,
-        color: "bg-primary/20 text-primary",
-      },
-      {
-        icon: <WarehouseIcon />,
-        title: "Transactions Confirmed",
-        detail: `${stats?.transactions.confirmed ?? 0} confirmed`,
-        color: "bg-primary/20 text-primary",
-      },
-      {
-        icon: <CheckIcon />,
-        title: "Low Stock Alerts",
-        detail: `${stats?.products.lowStock ?? 0} products with low stock`,
-        color: "bg-primary/20 text-primary",
-      },
-      {
-        icon: <CheckIcon />,
-        title: "Expired Products",
-        detail: `${stats?.products.expired ?? 0} expired`,
-        color: "bg-primary/20 text-primary",
-        isLast: true,
-      },
-    ];
-  };
-
-  const statCards = getStatCards();
-  const activities = getActivities();
 
   return (
     <div className="flex-1 bg-background">
       <div className="p-6 space-y-6">
+        {/* Shared Actions: Track Product + Verify Authenticity */}
         <div className="flex items-center gap-4 flex-wrap">
           {/* Track Product Dialog */}
           <Dialog
@@ -710,10 +439,10 @@ export default function SupplyChainDashboard() {
                         </p>
                         {trackResult.drug.currentOwner !==
                           "0x0000000000000000000000000000000000000000" && (
-                          <p className="text-xs text-muted-foreground font-mono break-all">
-                            {trackResult.drug.currentOwner}
-                          </p>
-                        )}
+                            <p className="text-xs text-muted-foreground font-mono break-all">
+                              {trackResult.drug.currentOwner}
+                            </p>
+                          )}
                       </div>
                       <div>
                         <span className="text-muted-foreground">Mfg Date:</span>
@@ -749,7 +478,7 @@ export default function SupplyChainDashboard() {
                     </div>
                   )}
 
-                   {/* Journey */}
+                  {/* Journey */}
                   <div>
                     <h4 className="font-semibold text-sm mb-3">
                       Ownership Journey ({trackResult.journey.length} step
@@ -777,8 +506,8 @@ export default function SupplyChainDashboard() {
                                   {step.name}
                                 </p>
                               </div>
-                              <p className="text-xs text-muted-foreground font-mono break-all mt-0.5">
-                                {step.address}
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {index === 0 ? "Manufacturer" : index === 1 ? "Distributor" : index === 2 ? "Wholesaler" : "Sold"}
                               </p>
                             </div>
                             {index < trackResult.journey.length - 1 && (
@@ -961,59 +690,8 @@ export default function SupplyChainDashboard() {
           </Dialog>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {statCards.map((stat, index) => (
-            <div
-              key={index}
-              className="bg-card p-6 rounded-xl border border-border"
-            >
-              <p className="text-sm font-medium text-muted-foreground">
-                {stat.label}
-              </p>
-              <p className="text-3xl font-bold text-foreground mt-1">
-                {loading ? "..." : stat.value.toLocaleString()}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Calendar27 />
-          </div>
-
-          <div className="bg-card p-6 rounded-xl shadow-sm border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">
-              Supply Chain Overview
-            </h3>
-            <div className="space-y-4">
-              {activities.map((activity, index) => (
-                <div key={index} className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <div
-                      className={`w-8 h-8 rounded-full ${activity.color} flex items-center justify-center`}
-                    >
-                      <span className="material-symbols-outlined text-base">
-                        {activity.icon}
-                      </span>
-                    </div>
-                    {!activity.isLast && (
-                      <div className="w-px flex-1 bg-border" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-foreground">
-                      {activity.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {activity.detail}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* Role-Specific Dashboard */}
+        {renderDashboard()}
       </div>
     </div>
   );

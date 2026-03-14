@@ -85,7 +85,7 @@ export default function WalletButton() {
 //   );
 
 return (
-    <div className="flex items-center gap-2  p-2 rounded-lg shadow-md">
+    <div className="flex items-center gap-2">
       {account ? (
         <>
           <Button variant="outline" disabled>
