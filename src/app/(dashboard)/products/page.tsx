@@ -137,6 +137,7 @@ export default function ProductsPage() {
   const {
     registerDrug,
     getDrugCounter,
+    getDrugDetails,
     transferToDistributor,
     transferToWholesaler,
     getMyDistributors,
@@ -239,6 +240,10 @@ export default function ProductsPage() {
 
       // Step 2: Get the on-chain drug ID (the counter after registration)
       const drugId = await getDrugCounter();
+      
+      // Step 2.5: Get the generated qrHash from the smart contract
+      const drugDetails = await getDrugDetails(Number(drugId));
+      const qrHash = drugDetails.qrHash;
 
       // Step 3: Save to database
       const res = await fetch("/api/products", {
@@ -252,7 +257,7 @@ export default function ProductsPage() {
           stock,
           manufacturingDate: manufacturingDateStr || new Date().toISOString(),
           expiryDate: expiryDateStr || undefined,
-          blockchainHash: txHash,
+          blockchainHash: qrHash, // Storing the qrHash here!
           status: "Verified",
           onChainDrugId: Number(drugId),
         }),

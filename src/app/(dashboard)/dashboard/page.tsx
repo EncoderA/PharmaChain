@@ -710,10 +710,10 @@ export default function SupplyChainDashboard() {
                         </p>
                         {trackResult.drug.currentOwner !==
                           "0x0000000000000000000000000000000000000000" && (
-                          <p className="text-xs text-muted-foreground font-mono break-all">
-                            {trackResult.drug.currentOwner}
-                          </p>
-                        )}
+                            <p className="text-xs text-muted-foreground font-mono break-all">
+                              {trackResult.drug.currentOwner}
+                            </p>
+                          )}
                       </div>
                       <div>
                         <span className="text-muted-foreground">Mfg Date:</span>
@@ -749,7 +749,7 @@ export default function SupplyChainDashboard() {
                     </div>
                   )}
 
-                   {/* Journey */}
+                  {/* Journey */}
                   <div>
                     <h4 className="font-semibold text-sm mb-3">
                       Ownership Journey ({trackResult.journey.length} step
@@ -777,8 +777,8 @@ export default function SupplyChainDashboard() {
                                   {step.name}
                                 </p>
                               </div>
-                              <p className="text-xs text-muted-foreground font-mono break-all mt-0.5">
-                                {step.address}
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {index === 0 ? "Manufacturer" : index === 1 ? "Distributor" : index === 2 ? "Wholesaler" : "Sold"}
                               </p>
                             </div>
                             {index < trackResult.journey.length - 1 && (
