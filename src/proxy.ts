@@ -17,6 +17,7 @@ const publicPaths = [
 // Routes that start with these prefixes are public
 const publicPrefixes = [
   "/api/auth/",
+  "/api/public/",  
   "/_next/",
   "/favicon.ico",
   "/logo.svg",
