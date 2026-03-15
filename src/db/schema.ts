@@ -91,3 +91,17 @@ export const transactionsTable = pgTable("transactions", {
   status: transactionStatusEnum("status").default("Pending").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ==================== CONSUMER SALES ====================
+
+export const consumerSalesTable = pgTable("consumer_sales", {
+  id: serial("id").primaryKey(),
+  transactionId: integer("transaction_id").references(() => transactionsTable.id),
+  productId: integer("product_id").references(() => productsTable.id).notNull(),
+  pharmacistId: integer("pharmacist_id").references(() => usersTable.id).notNull(),
+  consumerName: varchar("consumer_name", { length: 255 }).notNull(),
+  consumerPhone: varchar("consumer_phone", { length: 15 }),
+  consumerAddress: varchar("consumer_address", { length: 500 }),
+  quantity: integer("quantity").default(1).notNull(),
+  soldAt: timestamp("sold_at").defaultNow().notNull(),
+});

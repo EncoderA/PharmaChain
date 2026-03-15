@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
-import { transactionsTable, productsTable, usersTable } from "@/db/schema";
+import { transactionsTable, productsTable, usersTable, consumerSalesTable } from "@/db/schema";
 import { eq, and, or, sql } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 import { alias } from "drizzle-orm/pg-core";
@@ -72,12 +72,13 @@ export async function GET(req: Request) {
         productName: productsTable.name,
         productCode: productsTable.productCode,
         fromUserName: fromUser.fullName,
-        toUserName: toUser.fullName,
+        toUserName: sql<string>`COALESCE(${toUser.fullName}, ${consumerSalesTable.consumerName})`.as("to_user_name"),
       })
       .from(transactionsTable)
       .leftJoin(productsTable, eq(transactionsTable.productId, productsTable.id))
       .leftJoin(fromUser, eq(transactionsTable.fromUserId, fromUser.id))
       .leftJoin(toUser, eq(transactionsTable.toUserId, toUser.id))
+      .leftJoin(consumerSalesTable, eq(transactionsTable.id, consumerSalesTable.transactionId))
       .where(whereClause)
       .orderBy(sql`${transactionsTable.createdAt} DESC`);
 

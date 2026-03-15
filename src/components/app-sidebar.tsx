@@ -77,7 +77,7 @@ const navItems: NavItem[] = [
     name: "My Buyers",
     url: "/buyers",
     icon: Link2,
-    allowedRoles: ["manufacturer", "distributor"],
+    allowedRoles: ["manufacturer", "distributor", "wholesaler"],
   },
 ];
 

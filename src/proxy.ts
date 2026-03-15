@@ -28,7 +28,7 @@ const publicPrefixes = [
 // Key = path prefix, Value = allowed roles
 const roleRestrictions: Record<string, string[]> = {
   "/users": ["admin", "manufacturer"],
-  "/api/user": ["admin", "manufacturer", "distributor"],
+  "/api/user": ["admin", "manufacturer", "distributor", "wholesaler"],
   "/admin": ["admin"],
 };
 

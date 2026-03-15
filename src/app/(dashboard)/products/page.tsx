@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Loader2,
   Send,
+  ShoppingBag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +133,18 @@ export default function ProductsPage() {
   const [transferWholError, setTransferWholError] = useState<string | null>(null);
   const [wholesalers, setWholesalers] = useState<{ address: string; name: string; id: number }[]>([]);
   const [selectedWholesaler, setSelectedWholesaler] = useState("");
+  // Transfer to Pharmacist state (for wholesalers — off-chain)
+  const [transferPharmDialogOpen, setTransferPharmDialogOpen] = useState(false);
+  const [transferPharmProduct, setTransferPharmProduct] = useState<Product | null>(null);
+  const [transferPharmLoading, setTransferPharmLoading] = useState(false);
+  const [transferPharmError, setTransferPharmError] = useState<string | null>(null);
+  const [pharmacists, setPharmacists] = useState<{ address: string; name: string; id: number }[]>([]);
+  const [selectedPharmacist, setSelectedPharmacist] = useState("");
+  // Sell to Consumer state (for pharmacists)
+  const [sellDialogOpen, setSellDialogOpen] = useState(false);
+  const [sellProduct, setSellProduct] = useState<Product | null>(null);
+  const [sellLoading, setSellLoading] = useState(false);
+  const [sellError, setSellError] = useState<string | null>(null);
   const router = useRouter();
   const { user } = useUser();
   const {
@@ -140,6 +153,7 @@ export default function ProductsPage() {
     getDrugDetails,
     transferToDistributor,
     transferToWholesaler,
+    markAsSold,
     getMyDistributors,
   } = useSupplyChainContract();
 
@@ -537,6 +551,184 @@ export default function ProductsPage() {
     }
   };
 
+  // Open transfer-to-pharmacist dialog (wholesaler only — off-chain)
+  const openTransferPharmDialog = async (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTransferPharmProduct(product);
+    setTransferPharmError(null);
+    setSelectedPharmacist("");
+    setTransferPharmDialogOpen(true);
+
+    try {
+      const res = await fetch("/api/user");
+      if (res.ok) {
+        const dbUsers: { id: number; fullName: string; walletId: string; role: string; status: string }[] = await res.json();
+        const pharmacistList = dbUsers.filter(
+          (u) => u.role === "pharmacist" && u.status === "active"
+        );
+        setPharmacists(
+          pharmacistList.map((u) => ({
+            address: u.walletId,
+            name: u.fullName,
+            id: u.id,
+          }))
+        );
+      }
+    } catch {
+      setPharmacists([]);
+    }
+  };
+
+  /** Transfer to Pharmacist — completely off-chain (wholesaler action) */
+  const handleTransferToPharmacist = async () => {
+    if (!transferPharmProduct || !selectedPharmacist) return;
+    setTransferPharmLoading(true);
+    setTransferPharmError(null);
+
+    try {
+      const pharmacist = pharmacists.find((p) => String(p.id) === selectedPharmacist);
+      if (!pharmacist) throw new Error("Select a pharmacist");
+
+      // Step 1: Update product in DB — change currentOwnerId to pharmacist
+      const putRes = await fetch(`/api/products/${transferPharmProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentOwnerId: pharmacist.id,
+          status: "Verified",
+        }),
+      });
+
+      if (!putRes.ok) {
+        const data = await putRes.json();
+        throw new Error(data.error || "Failed to update product");
+      }
+
+      // Step 2: Record transaction (off-chain — no txHash / blockNumber)
+      await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: transferPharmProduct.id,
+          action: "Transferred to Pharmacist",
+          fromUserId: user?.id,
+          toUserId: pharmacist.id,
+          status: "Confirmed",
+        }),
+      });
+
+      setTransferPharmDialogOpen(false);
+      setTransferPharmProduct(null);
+      fetchProducts();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setTransferPharmError(message);
+    } finally {
+      setTransferPharmLoading(false);
+    }
+  };
+
+  // Open sell-to-consumer dialog (pharmacist only)
+  const openSellDialog = (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSellProduct(product);
+    setSellError(null);
+    setSellDialogOpen(true);
+  };
+
+  /** Sell to consumer: on-chain markAsSold + DB sale record */
+  const handleSellToConsumer = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!sellProduct) return;
+    setSellLoading(true);
+    setSellError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const consumerName = formData.get("consumerName") as string;
+    const consumerPhone = formData.get("consumerPhone") as string;
+    const consumerAddress = formData.get("consumerAddress") as string;
+    const quantity = parseInt(formData.get("quantity") as string) || 1;
+
+    if (!consumerName) {
+      setSellError("Consumer name is required");
+      setSellLoading(false);
+      return;
+    }
+
+    if (quantity > sellProduct.stock) {
+      setSellError("Quantity exceeds available stock");
+      setSellLoading(false);
+      return;
+    }
+
+    try {
+      if (!sellProduct.blockchainHash) {
+        throw new Error("This product was not registered on-chain. Cannot sell.");
+      }
+
+      let onChainDrugId: number | null = sellProduct.onChainDrugId ?? null;
+
+      if (onChainDrugId === null) {
+        const { getSupplyChainContract } = await import("@/blockchain/contract");
+        const contract = await getSupplyChainContract();
+        const counter = await contract.drugCounter();
+
+        for (let i = Number(counter); i >= 1; i--) {
+          const drug = await contract.getDrugDetails(i);
+          if (
+            drug.name === sellProduct.name &&
+            (Number(drug.stage) === 2 || Number(drug.stage) === 1) && // Wholesaled or Distributed stage
+            !drug.isRejected
+          ) {
+            onChainDrugId = i;
+            break;
+          }
+        }
+      }
+
+      if (onChainDrugId === null) {
+        throw new Error("Could not find this drug on-chain for sale.");
+      }
+
+      // Step 1: Mark as sold on-chain via MetaMask
+      const { txHash, blockNumber } = await markAsSold(onChainDrugId);
+
+      // Step 2: Record sale in DB (creates transaction + consumer_sales record + updates stock)
+      const res = await fetch("/api/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: sellProduct.id,
+          consumerName,
+          consumerPhone: consumerPhone || undefined,
+          consumerAddress: consumerAddress || undefined,
+          quantity,
+          txHash,
+          blockNumber,
+          status: "Confirmed",
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to record sale");
+      }
+
+      setSellDialogOpen(false);
+      setSellProduct(null);
+      fetchProducts();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      if (message.includes("user rejected") || message.includes("ACTION_REJECTED")) {
+        setSellError("MetaMask transaction was rejected.");
+      } else {
+        setSellError(message);
+      }
+    } finally {
+      setSellLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 p-6 bg-background text-foreground space-y-6">
 
@@ -856,6 +1048,49 @@ export default function ProductsPage() {
                                   </Tooltip>
                                 </TooltipProvider>
                               )}
+                            {/* Transfer to Pharmacist — wholesaler only, products they own */}
+                            {user?.role === "wholesaler" &&
+                              product.status === "Verified" &&
+                              product.currentOwnerId === user.id && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => openTransferPharmDialog(product, e)}
+                                      >
+                                        <Send className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Transfer to Pharmacist</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            {/* Sell to Consumer — pharmacist only, products they own with stock */}
+                            {user?.role === "pharmacist" &&
+                              product.status === "Verified" &&
+                              product.currentOwnerId === user.id &&
+                              product.stock > 0 && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => openSellDialog(product, e)}
+                                      >
+                                        <ShoppingBag className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Sell to Consumer</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
                           </div>
                         </td>
                       </tr>
@@ -1150,6 +1385,174 @@ export default function ProductsPage() {
               )}
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer to Pharmacist Dialog (for wholesalers — off-chain) */}
+      <Dialog open={transferPharmDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setTransferPharmDialogOpen(false);
+          setTransferPharmProduct(null);
+          setTransferPharmError(null);
+          setSelectedPharmacist("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transfer to Pharmacist</DialogTitle>
+            <DialogDescription>
+              {transferPharmProduct
+                ? `Transfer "${transferPharmProduct.name}" (${transferPharmProduct.productCode}) to a registered pharmacist.`
+                : "Select a pharmacist to transfer this product to."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {transferPharmError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{transferPharmError}</AlertDescription>
+              </Alert>
+            )}
+
+            {pharmacists.length === 0 && !transferPharmError ? (
+              <p className="text-sm text-muted-foreground">
+                No active pharmacists found. Ensure pharmacists are registered and approved first.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label className="mb-1 block">Select Pharmacist</Label>
+                  <Select value={selectedPharmacist} onValueChange={setSelectedPharmacist}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a pharmacist..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pharmacists.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  This is an off-chain transfer. It will update the database only — no MetaMask transaction required.
+                </p>
+              </>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setTransferPharmDialogOpen(false);
+                  setTransferPharmProduct(null);
+                }}
+                disabled={transferPharmLoading}
+              >
+                Cancel
+              </Button>
+              {pharmacists.length > 0 && (
+                <Button
+                  onClick={handleTransferToPharmacist}
+                  disabled={transferPharmLoading || !selectedPharmacist}
+                >
+                  {transferPharmLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Transferring...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Transfer
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sell to Consumer Dialog (for pharmacists) */}
+      <Dialog open={sellDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setSellDialogOpen(false);
+          setSellProduct(null);
+          setSellError(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sell to Consumer</DialogTitle>
+            <DialogDescription>
+              {sellProduct
+                ? `Sell "${sellProduct.name}" (${sellProduct.productCode}) to an end consumer. Available stock: ${sellProduct.stock} units.`
+                : "Fill in consumer details to complete the sale."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSellToConsumer} className="space-y-4 mt-2">
+            {sellError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{sellError}</AlertDescription>
+              </Alert>
+            )}
+            <div>
+              <Label className="mb-1 block">Consumer Name *</Label>
+              <Input name="consumerName" placeholder="Enter consumer's full name" required />
+            </div>
+            <div>
+              <Label className="mb-1 block">Consumer Phone</Label>
+              <Input name="consumerPhone" placeholder="e.g. 9876543210" />
+            </div>
+            <div>
+              <Label className="mb-1 block">Consumer Address</Label>
+              <Input name="consumerAddress" placeholder="Enter consumer's address" />
+            </div>
+            <div>
+              <Label className="mb-1 block">Quantity</Label>
+              <Input
+                name="quantity"
+                type="number"
+                min={1}
+                max={sellProduct?.stock || 1}
+                defaultValue={1}
+                required
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This will call markAsSold on-chain via MetaMask and record the sale in the database.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setSellDialogOpen(false);
+                  setSellProduct(null);
+                }}
+                disabled={sellLoading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={sellLoading}>
+                {sellLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing sale...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="h-4 w-4 mr-2" />
+                    Confirm Sale
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

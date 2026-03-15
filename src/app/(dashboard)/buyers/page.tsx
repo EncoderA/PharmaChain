@@ -50,6 +50,7 @@ import axios from "axios";
 const ALLOWED_BUYER_ROLES: Record<string, string[]> = {
   manufacturer: ["distributor", "wholesaler"],
   distributor: ["pharmacist"],
+  wholesaler: ["pharmacist"],
 };
 
 interface Relation {
@@ -107,7 +108,7 @@ export default function BuyersPage() {
   const isAuthorized =
     !userLoading &&
     currentUser != null &&
-    (currentUser.role === "manufacturer" || currentUser.role === "distributor");
+    (currentUser.role === "manufacturer" || currentUser.role === "distributor" || currentUser.role === "wholesaler");
 
   // Redirect unauthorized
   useEffect(() => {
