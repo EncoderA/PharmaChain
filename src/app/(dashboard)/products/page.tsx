@@ -12,6 +12,7 @@ import {
   Loader2,
   Send,
   ShoppingBag,
+  Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +66,7 @@ interface Product {
   category: string | null;
   batch: string | null;
   stock: number;
-  status: "Verified" | "Pending" | "Expired";
+  status: "Verified" | "Pending" | "Expired" | "Rejected" | "Sold";
   manufacturerId: number | null;
   currentOwnerId: number | null;
   onChainDrugId: number | null;
@@ -78,17 +79,19 @@ interface Product {
 }
 
 const getStatusBadge = (status: Product["status"]) => {
-  const statusConfig = {
-    Verified: { variant: "default" as const, icon: CheckCircle },
-    Pending: { variant: "secondary" as const, icon: AlertCircle },
-    Expired: { variant: "destructive" as const, icon: AlertCircle },
+  const statusConfig: Record<Product["status"], { variant: "default" | "secondary" | "destructive" | "outline"; icon: any; className?: string }> = {
+    Verified: { variant: "default", icon: CheckCircle },
+    Pending: { variant: "secondary", icon: AlertCircle },
+    Expired: { variant: "destructive", icon: AlertCircle },
+    Rejected: { variant: "destructive", icon: AlertCircle },
+    Sold: { variant: "outline", icon: Store, className: "bg-green-50 text-green-700 border-green-200" },
   };
 
   const config = statusConfig[status];
   const Icon = config.icon;
 
   return (
-    <Badge variant={config.variant} className="flex items-center gap-1 w-fit">
+    <Badge variant={config.variant} className={`flex items-center gap-1 w-fit ${config.className || ""}`}>
       <Icon className="h-3 w-3" />
       {status}
     </Badge>
@@ -636,7 +639,7 @@ export default function ProductsPage() {
     setSellDialogOpen(true);
   };
 
-  /** Sell to consumer: on-chain markAsSold + DB sale record */
+  /** Sell to consumer: DB sale record (off-chain) */
   const handleSellToConsumer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!sellProduct) return;
@@ -662,38 +665,7 @@ export default function ProductsPage() {
     }
 
     try {
-      if (!sellProduct.blockchainHash) {
-        throw new Error("This product was not registered on-chain. Cannot sell.");
-      }
-
-      let onChainDrugId: number | null = sellProduct.onChainDrugId ?? null;
-
-      if (onChainDrugId === null) {
-        const { getSupplyChainContract } = await import("@/blockchain/contract");
-        const contract = await getSupplyChainContract();
-        const counter = await contract.drugCounter();
-
-        for (let i = Number(counter); i >= 1; i--) {
-          const drug = await contract.getDrugDetails(i);
-          if (
-            drug.name === sellProduct.name &&
-            (Number(drug.stage) === 2 || Number(drug.stage) === 1) && // Wholesaled or Distributed stage
-            !drug.isRejected
-          ) {
-            onChainDrugId = i;
-            break;
-          }
-        }
-      }
-
-      if (onChainDrugId === null) {
-        throw new Error("Could not find this drug on-chain for sale.");
-      }
-
-      // Step 1: Mark as sold on-chain via MetaMask
-      const { txHash, blockNumber } = await markAsSold(onChainDrugId);
-
-      // Step 2: Record sale in DB (creates transaction + consumer_sales record + updates stock)
+      // Record sale in DB (creates transaction + consumer_sales record + updates stock)
       const res = await fetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -703,8 +675,8 @@ export default function ProductsPage() {
           consumerPhone: consumerPhone || undefined,
           consumerAddress: consumerAddress || undefined,
           quantity,
-          txHash,
-          blockNumber,
+          txHash: null,
+          blockNumber: null,
           status: "Confirmed",
         }),
       });

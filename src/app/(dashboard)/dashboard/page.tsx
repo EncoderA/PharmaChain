@@ -206,14 +206,32 @@ export default function SupplyChainDashboard() {
         getDrugJourney(drugId),
       ]);
 
-      // Resolve all addresses (journey + current owner) in one call
+      // Fetch off-chain transactions from database using the API
+      // First, get the product ID corresponding to this on-chain drug ID
+      const productRes = await fetch(`/api/products?onChainDrugId=${drugId}`);
+      let dbTransactions: any[] = [];
+      if (productRes.ok) {
+        const products = await productRes.json();
+        if (products && products.length > 0) {
+          const productId = products[0].id;
+          const txRes = await fetch(`/api/transactions?productId=${productId}`);
+          if (txRes.ok) {
+            dbTransactions = await txRes.json();
+          }
+        }
+      }
+
+      // Collect addresses from on-chain journey
       const allAddresses = [...journeyAddresses];
       if (!allAddresses.some((a) => a.toLowerCase() === drug.currentOwner.toLowerCase())) {
         allAddresses.push(drug.currentOwner);
       }
       const nameMap = await resolveAddresses(allAddresses);
 
-      const journey: JourneyStep[] = journeyAddresses.map((addr) => {
+      // Build the base on-chain journey
+      const onChainJourney: JourneyStep[] = journeyAddresses
+        .filter((addr) => addr !== "0x0000000000000000000000000000000000000000")
+        .map((addr) => {
         const resolved = nameMap.get(addr.toLowerCase());
         return {
           address: addr,
@@ -222,11 +240,39 @@ export default function SupplyChainDashboard() {
         };
       });
 
-      const currentOwnerResolved = nameMap.get(drug.currentOwner.toLowerCase());
-      const currentOwnerName =
-        drug.currentOwner === "0x0000000000000000000000000000000000000000"
-          ? "Sold (no owner)"
-          : currentOwnerResolved?.name ?? `${drug.currentOwner.slice(0, 6)}...${drug.currentOwner.slice(-4)}`;
+      // Append off-chain transactions (Pharmacist / Sold) from DB
+      const offChainSteps: JourneyStep[] = dbTransactions
+        .filter((tx) => !tx.txHash && tx.action !== "Sold") // purely off-chain and not Sold
+        .map((tx) => {
+          let role = "unknown";
+          let address = "Off-chain";
+          if (tx.action === "Transferred to Pharmacist") {
+            role = "pharmacist";
+          }
+          return {
+            name: tx.toUserName || tx.action,
+            role: role,
+            address: address,
+          };
+        });
+
+      const journey = [...onChainJourney, ...offChainSteps];
+
+      // Resolve current owner (handles case where final owner is off-chain)
+      let currentOwnerName = "";
+      const isSoldOffChain = dbTransactions.some((tx) => tx.action === "Sold");
+
+      if (isSoldOffChain) {
+        currentOwnerName = "Sold to Customer";
+      } else if (offChainSteps.length > 0) {
+        currentOwnerName = offChainSteps[offChainSteps.length - 1].name;
+      } else {
+        const currentOwnerResolved = nameMap.get(drug.currentOwner.toLowerCase());
+        currentOwnerName =
+          drug.currentOwner === "0x0000000000000000000000000000000000000000"
+            ? "Sold (no owner)"
+            : currentOwnerResolved?.name ?? `${drug.currentOwner.slice(0, 6)}...${drug.currentOwner.slice(-4)}`;
+      }
 
       setTrackResult({ drug, journey, currentOwnerName });
     } catch (err: unknown) {
@@ -507,7 +553,12 @@ export default function SupplyChainDashboard() {
                                 </p>
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                {index === 0 ? "Manufacturer" : index === 1 ? "Distributor" : index === 2 ? "Wholesaler" : "Sold"}
+                                {index === 0 ? "Manufacturer" :
+                                  index === 1 ? "Distributor" :
+                                    index === 2 ? "Wholesaler" :
+                                      index === 3 || step.role === "pharmacist" ? "Pharmacist" :
+                                        index === 4 || step.role === "customer" ? "Sold to Consumer" :
+                                          step.role}
                               </p>
                             </div>
                             {index < trackResult.journey.length - 1 && (

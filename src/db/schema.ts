@@ -21,6 +21,8 @@ export const productStatusEnum = pgEnum("product_status", [
   "Verified",
   "Pending",
   "Expired",
+  "Rejected",
+  "Sold",
 ]);
 
 export const transactionStatusEnum = pgEnum("transaction_status", [

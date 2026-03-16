@@ -42,8 +42,8 @@ export async function GET(req: Request) {
       );
     }
 
-    // Role-based filtering
-    if (user.role !== "admin") {
+    // Role-based filtering: skip if we are tracking a specific product
+    if (!productId && user.role !== "admin") {
       conditions.push(
         or(
           eq(transactionsTable.fromUserId, user.id),

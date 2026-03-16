@@ -49,249 +49,25 @@ import {
 
 const ReportsPage = () => {
   const [timeRange, setTimeRange] = useState("30days");
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // All data for different time ranges
-  const allPerformanceData = {
-    "7days": [
-      { month: "Day 1", completed: 35, pending: 8, delayed: 2 },
-      { month: "Day 2", completed: 42, pending: 6, delayed: 1 },
-      { month: "Day 3", completed: 38, pending: 9, delayed: 3 },
-      { month: "Day 4", completed: 45, pending: 5, delayed: 2 },
-      { month: "Day 5", completed: 40, pending: 7, delayed: 1 },
-      { month: "Day 6", completed: 48, pending: 6, delayed: 2 },
-      { month: "Day 7", completed: 50, pending: 4, delayed: 1 },
-    ],
-    "30days": [
-      { month: "Week 1", completed: 280, pending: 45, delayed: 12 },
-      { month: "Week 2", completed: 320, pending: 38, delayed: 8 },
-      { month: "Week 3", completed: 295, pending: 42, delayed: 15 },
-      { month: "Week 4", completed: 340, pending: 35, delayed: 10 },
-    ],
-    "90days": [
-      { month: "Jan", completed: 120, pending: 25, delayed: 8 },
-      { month: "Feb", completed: 145, pending: 18, delayed: 5 },
-      { month: "Mar", completed: 165, pending: 22, delayed: 12 },
-    ],
-    "1year": [
-      { month: "Jan", completed: 120, pending: 25, delayed: 8 },
-      { month: "Feb", completed: 145, pending: 18, delayed: 5 },
-      { month: "Mar", completed: 165, pending: 22, delayed: 12 },
-      { month: "Apr", completed: 140, pending: 30, delayed: 10 },
-      { month: "May", completed: 190, pending: 15, delayed: 4 },
-      { month: "Jun", completed: 210, pending: 20, delayed: 6 },
-      { month: "Jul", completed: 185, pending: 28, delayed: 9 },
-      { month: "Aug", completed: 220, pending: 22, delayed: 7 },
-      { month: "Sep", completed: 195, pending: 25, delayed: 11 },
-      { month: "Oct", completed: 240, pending: 18, delayed: 5 },
-      { month: "Nov", completed: 225, pending: 20, delayed: 8 },
-      { month: "Dec", completed: 250, pending: 15, delayed: 6 },
-    ],
-  };
-
-  const allStatusData = {
-    "7days": [
-      { name: "Verified", value: 298, color: "#10b981" },
-      { name: "Pending", value: 45, color: "#f59e0b" },
-      { name: "Expired", value: 12, color: "#ef4444" },
-    ],
-    "30days": [
-      { name: "Verified", value: 1235, color: "#10b981" },
-      { name: "Pending", value: 160, color: "#f59e0b" },
-      { name: "Expired", value: 45, color: "#ef4444" },
-    ],
-    "90days": [
-      { name: "Verified", value: 3680, color: "#10b981" },
-      { name: "Pending", value: 420, color: "#f59e0b" },
-      { name: "Expired", value: 125, color: "#ef4444" },
-    ],
-    "1year": [
-      { name: "Verified", value: 15420, color: "#10b981" },
-      { name: "Pending", value: 1680, color: "#f59e0b" },
-      { name: "Expired", value: 520, color: "#ef4444" },
-    ],
-  };
-
-  const allTransactionData = {
-    "7days": [
-      { date: "Oct 23", transactions: 156, value: 24800 },
-      { date: "Oct 24", transactions: 189, value: 31200 },
-      { date: "Oct 25", transactions: 210, value: 38900 },
-      { date: "Oct 26", transactions: 175, value: 28600 },
-      { date: "Oct 27", transactions: 220, value: 40100 },
-      { date: "Oct 28", transactions: 245, value: 42800 },
-      { date: "Oct 29", transactions: 268, value: 45200 },
-    ],
-    "30days": [
-      { date: "Week 1", transactions: 1100, value: 185000 },
-      { date: "Week 2", transactions: 1250, value: 210000 },
-      { date: "Week 3", transactions: 1180, value: 195000 },
-      { date: "Week 4", transactions: 1320, value: 225000 },
-    ],
-    "90days": [
-      { date: "Month 1", transactions: 4200, value: 680000 },
-      { date: "Month 2", transactions: 4850, value: 750000 },
-      { date: "Month 3", transactions: 5120, value: 820000 },
-    ],
-    "1year": [
-      { date: "Q1", transactions: 14200, value: 2250000 },
-      { date: "Q2", transactions: 16850, value: 2680000 },
-      { date: "Q3", transactions: 18120, value: 2950000 },
-      { date: "Q4", transactions: 19500, value: 3150000 },
-    ],
-  };
-
-  const allMetrics = {
-    "7days": [
-      {
-        title: "Total Transactions",
-        value: "1,465",
-        change: "+8.5%",
-        icon: Zap,
-        color: "text-blue-500",
-      },
-      {
-        title: "Products Verified",
-        value: "298",
-        change: "+5.2%",
-        icon: CheckCircle,
-        color: "text-green-500",
-      },
-      {
-        title: "Pending Verification",
-        value: "45",
-        change: "-2.1%",
-        icon: Clock,
-        color: "text-orange-500",
-      },
-      {
-        title: "Alerts",
-        value: "12",
-        change: "+1.4%",
-        icon: AlertTriangle,
-        color: "text-red-500",
-      },
-    ],
-    "30days": [
-      {
-        title: "Total Transactions",
-        value: "4,850",
-        change: "+12.5%",
-        icon: Zap,
-        color: "text-blue-500",
-      },
-      {
-        title: "Products Verified",
-        value: "1,235",
-        change: "+8.2%",
-        icon: CheckCircle,
-        color: "text-green-500",
-      },
-      {
-        title: "Pending Verification",
-        value: "160",
-        change: "-3.1%",
-        icon: Clock,
-        color: "text-orange-500",
-      },
-      {
-        title: "Alerts",
-        value: "45",
-        change: "+2.4%",
-        icon: AlertTriangle,
-        color: "text-red-500",
-      },
-    ],
-    "90days": [
-      {
-        title: "Total Transactions",
-        value: "14,170",
-        change: "+15.8%",
-        icon: Zap,
-        color: "text-blue-500",
-      },
-      {
-        title: "Products Verified",
-        value: "3,680",
-        change: "+10.5%",
-        icon: CheckCircle,
-        color: "text-green-500",
-      },
-      {
-        title: "Pending Verification",
-        value: "420",
-        change: "-4.2%",
-        icon: Clock,
-        color: "text-orange-500",
-      },
-      {
-        title: "Alerts",
-        value: "125",
-        change: "+3.8%",
-        icon: AlertTriangle,
-        color: "text-red-500",
-      },
-    ],
-    "1year": [
-      {
-        title: "Total Transactions",
-        value: "68,670",
-        change: "+18.2%",
-        icon: Zap,
-        color: "text-blue-500",
-      },
-      {
-        title: "Products Verified",
-        value: "15,420",
-        change: "+12.8%",
-        icon: CheckCircle,
-        color: "text-green-500",
-      },
-      {
-        title: "Pending Verification",
-        value: "1,680",
-        change: "-5.5%",
-        icon: Clock,
-        color: "text-orange-500",
-      },
-      {
-        title: "Alerts",
-        value: "520",
-        change: "+4.2%",
-        icon: AlertTriangle,
-        color: "text-red-500",
-      },
-    ],
-  };
-
-  const performanceData = allPerformanceData[timeRange as keyof typeof allPerformanceData];
-  const statusData = allStatusData[timeRange as keyof typeof allStatusData];
-  const transactionData = allTransactionData[timeRange as keyof typeof allTransactionData];
-  const metrics = allMetrics[timeRange as keyof typeof allMetrics];
-
-  const topProducts = [
-    {
-      id: "PRD-001",
-      name: "Paracetamol 500mg",
-      sales: 1250,
-      status: "Verified",
-    },
-    {
-      id: "PRD-002",
-      name: "Amoxicillin 250mg",
-      sales: 980,
-      status: "Verified",
-    },
-    { id: "PRD-003", name: "Vitamin C 1000mg", sales: 750, status: "Pending" },
-    { id: "PRD-004", name: "Ibuprofen 400mg", sales: 620, status: "Expired" },
-    { id: "PRD-005", name: "Aspirin 100mg", sales: 540, status: "Verified" },
-  ];
-
-  const partnersData = [
-    { partner: "PharmaChain Labs", onTime: 98, delayed: 2 },
-    { partner: "MediDistribute Inc", onTime: 95, delayed: 5 },
-    { partner: "PharmaBulk Solutions", onTime: 92, delayed: 8 },
-    { partner: "HealthCare Pharmacy", onTime: 96, delayed: 4 },
-  ];
+  React.useEffect(() => {
+    async function fetchData() {
+      try {
+        setIsLoading(true);
+        const res = await fetch(`/api/reports?timeRange=${timeRange}`);
+        if (!res.ok) throw new Error("Failed to fetch reports data");
+        const json = await res.json();
+        setData(json);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchData();
+  }, [timeRange]);
 
   const chartConfig = {
     completed: { label: "Completed", color: "#10b981" },
@@ -300,6 +76,37 @@ const ReportsPage = () => {
     transactions: { label: "Transactions", color: "#3b82f6" },
     value: { label: "Value (USD)", color: "#8b5cf6" },
     onTime: { label: "On Time", color: "#10b981" },
+  };
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex-1 p-6 bg-background space-y-6 flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <p className="text-muted-foreground">Loading report data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const {
+    performanceData,
+    statusData,
+    transactionData,
+    topProducts,
+    metrics,
+    partnersData,
+    summary
+  } = data;
+
+
+  const iconMap: Record<string, any> = {
+    Zap,
+    CheckCircle,
+    Clock,
+    AlertTriangle,
+    TrendingUp,
+    Package
   };
 
   return (
@@ -333,8 +140,8 @@ const ReportsPage = () => {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {metrics.map((metric) => {
-          const Icon = metric.icon;
+        {metrics.map((metric: any) => {
+          const Icon = iconMap[metric.icon] || Package;
           return (
             <Card key={metric.title}>
               <CardHeader className="pb-2">
@@ -396,7 +203,7 @@ const ReportsPage = () => {
                   dataKey="value"
                   label={({ name, value }) => `${name}: ${value}`}
                 >
-                  {statusData.map((entry, index) => (
+                  {statusData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -440,7 +247,12 @@ const ReportsPage = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {topProducts.map((product) => (
+              {topProducts.length === 0 && (
+                <div className="text-sm text-muted-foreground py-4 text-center">
+                  No top products found for this period.
+                </div>
+              )}
+              {topProducts.map((product: any) => (
                 <div
                   key={product.id}
                   className="flex items-center justify-between"
@@ -504,27 +316,33 @@ const ReportsPage = () => {
                 <p className="text-sm text-muted-foreground">
                   Average Processing Time
                 </p>
-                <p className="text-2xl font-bold mt-1">2.5 days</p>
-                <p className="text-xs text-green-600 mt-1">
-                  ↓ 15% from last period
+                <p className="text-2xl font-bold mt-1">
+                  {summary?.avgProcessingTime || "-"}
+                </p>
+                <p className={`text-xs mt-1 ${summary?.avgProcessingTimeChange?.startsWith("-") ? "text-green-600" : "text-red-600"}`}>
+                  {summary?.avgProcessingTimeChange} from last period
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">
                   On-Time Delivery Rate
                 </p>
-                <p className="text-2xl font-bold mt-1">94.8%</p>
-                <p className="text-xs text-green-600 mt-1">
-                  ↑ 3.2% from last period
+                <p className="text-2xl font-bold mt-1">
+                  {summary?.onTimeDeliveryRate || "-"}
+                </p>
+                <p className={`text-xs mt-1 ${summary?.onTimeDeliveryRateChange?.startsWith("+") || summary?.onTimeDeliveryRateChange === "0%" ? "text-green-600" : "text-red-600"}`}>
+                  {summary?.onTimeDeliveryRateChange} from last period
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">
                   Blockchain Verification Rate
                 </p>
-                <p className="text-2xl font-bold mt-1">99.6%</p>
-                <p className="text-xs text-green-600 mt-1">
-                  ↑ 0.8% from last period
+                <p className="text-2xl font-bold mt-1">
+                  {summary?.blockchainVerificationRate || "-"}
+                </p>
+                <p className={`text-xs mt-1 ${summary?.blockchainVerificationRateChange?.startsWith("-") ? "text-red-600" : "text-green-600"}`}>
+                  {summary?.blockchainVerificationRateChange} from last period
                 </p>
               </div>
             </div>

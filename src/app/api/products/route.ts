@@ -15,8 +15,13 @@ export async function GET(req: Request) {
     const status = searchParams.get("status");
     const manufacturerId = searchParams.get("manufacturerId");
     const search = searchParams.get("search");
+    const onChainDrugId = searchParams.get("onChainDrugId");
 
     const conditions = [];
+
+    if (onChainDrugId) {
+      conditions.push(eq(productsTable.onChainDrugId, parseInt(onChainDrugId)));
+    }
 
     if (status && status !== "all") {
       conditions.push(
@@ -40,11 +45,13 @@ export async function GET(req: Request) {
     }
 
     // Role-based filtering: manufacturers see their own products
-    if (user.role === "manufacturer") {
-      conditions.push(eq(productsTable.manufacturerId, user.id));
-    } else if (user.role === "distributor" || user.role === "pharmacist" || user.role === "wholesaler") {
-      // Distributors/pharmacists/wholesalers see only products they currently own
-      conditions.push(eq(productsTable.currentOwnerId, user.id));
+    if (!onChainDrugId) {
+      if (user.role === "manufacturer") {
+        conditions.push(eq(productsTable.manufacturerId, user.id));
+      } else if (user.role === "distributor" || user.role === "pharmacist" || user.role === "wholesaler") {
+        // Distributors/pharmacists/wholesalers see only products they currently own
+        conditions.push(eq(productsTable.currentOwnerId, user.id));
+      }
     }
     // Admins see everything — no extra filter
 

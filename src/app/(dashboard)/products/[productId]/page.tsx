@@ -43,7 +43,7 @@ interface ProductDetail {
   category: string | null;
   batch: string | null;
   stock: number;
-  status: "Verified" | "Pending" | "Expired";
+  status: "Verified" | "Pending" | "Expired" | "Rejected" | "Sold";
   manufacturerId: number | null;
   currentOwnerId: number | null;
   onChainDrugId: number | null;
@@ -211,7 +211,7 @@ export default function ProductDetailPage() {
       await fetch(`/api/products/${product.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Expired" }),
+        body: JSON.stringify({ status: "Rejected" }),
       });
 
       // Step 3: Record transaction
@@ -229,7 +229,7 @@ export default function ProductDetailPage() {
       });
 
       // Refresh data
-      setProduct((prev) => prev ? { ...prev, status: "Expired" as const } : prev);
+      setProduct((prev) => prev ? { ...prev, status: "Rejected" as const } : prev);
       const txRes = await fetch(`/api/transactions?productId=${productId}`);
       if (txRes.ok) setTransactions(await txRes.json());
     } catch (err: unknown) {
@@ -414,21 +414,16 @@ export default function ProductDetailPage() {
     }
   };
 
-  /** Mark drug as sold on-chain + DB (pharmacist/wholesaler) */
+  /** Mark drug as sold off-chain (pharmacist/wholesaler) */
   const handleMarkAsSold = async () => {
     if (!product) return;
     setSoldLoading(true);
     setSoldError(null);
     try {
-      if (!product.blockchainHash) throw new Error("Product not registered on-chain.");
-
-      const onChainDrugId = await findOnChainDrugId(product.name, 2); // Wholesaled stage
-      const { txHash, blockNumber } = await markAsSold(onChainDrugId);
-
       await fetch(`/api/products/${product.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Verified" }),
+        body: JSON.stringify({ status: "Sold" }),
       });
 
       await fetch("/api/transactions", {
@@ -438,8 +433,8 @@ export default function ProductDetailPage() {
           productId: product.id,
           action: "Sold",
           fromUserId: user?.id,
-          txHash,
-          blockNumber,
+          txHash: null,
+          blockNumber: null,
           status: "Confirmed",
         }),
       });
@@ -483,7 +478,15 @@ export default function ProductDetailPage() {
         </Badge>
       );
     }
-    if (status === "Expired" || status === "Failed") {
+    if (status === "Sold") {
+      return (
+        <Badge variant="outline" className="flex items-center gap-1 bg-green-50 text-green-700 border-green-200">
+          <Store className="h-3 w-3" />
+          {status}
+        </Badge>
+      );
+    }
+    if (status === "Expired" || status === "Failed" || status === "Rejected") {
       return (
         <Badge variant="destructive" className="flex items-center gap-1">
           <AlertCircle className="h-3 w-3" />
@@ -531,7 +534,7 @@ export default function ProductDetailPage() {
       <div className="flex items-center justify-between">
         <BackButton />
         {/* Action buttons based on user role and product state */}
-        {product.status !== "Expired" && product.blockchainHash && (
+        {product.status !== "Expired" && product.status !== "Rejected" && product.status !== "Sold" && product.blockchainHash && (
           <div className="flex items-center gap-2">
             {/* Manufacturer: Transfer to Distributor */}
             {user?.role === "manufacturer" &&
@@ -745,9 +748,9 @@ export default function ProductDetailPage() {
         {transactions.length > 0 && (
           <CardContent>
             <div className="relative">
-              {transactions.map((tx, index) => {
+              {transactions.filter(tx => tx.action !== "Sold").map((tx, index, arr) => {
                 const Icon = stageIcons[tx.action] || User;
-                const isLast = index === transactions.length - 1;
+                const isLast = index === arr.length - 1;
                 const isCompleted = tx.status === "Confirmed";
                 const isPending = tx.status === "Pending";
 
