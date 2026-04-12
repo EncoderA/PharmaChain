@@ -70,8 +70,8 @@ export async function POST(req: Request) {
     // Hash password
     const hashedPassword = await hashPassword(body.password);
 
-    // Determine status: manufacturers are active immediately, others need approval
-    const status = body.role === "manufacturer" ? "active" : "pending";
+    // Determine status: all users need approval
+    const status = "pending";
 
     // Create user
     const inserted = await db
@@ -98,19 +98,6 @@ export async function POST(req: Request) {
       });
 
     const user = inserted[0];
-
-    // Only auto-login active users (manufacturers)
-    if (user.status === "active") {
-      const token = await createToken({
-        userId: user.id,
-        email: user.email ?? "",
-        role: user.role,
-      });
-
-      await setAuthCookie(token);
-
-      return NextResponse.json({ user }, { status: 201 });
-    }
 
     // Pending users get a success message but no session
     return NextResponse.json(

@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useUser } from "@/contexts/user-context";
 import axios from "axios";
+import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
 interface User {
   id: number;
@@ -89,6 +90,7 @@ const UsersPage = () => {
   const [error, setError] = useState<string | null>(null);
   const { user: currentUser, isLoading: userLoading } = useUser();
   const router = useRouter();
+  const { addManufacturer, addDistributor, addWholesaler, removeParticipant } = useSupplyChainContract();
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -171,15 +173,40 @@ const UsersPage = () => {
     setChangingStatus(true);
     setStatusChangeError(null);
     try {
-      await axios.patch(`/api/user/${statusChangeTarget.user.id}`, {
-        status: statusChangeTarget.newStatus,
+      const { user, newStatus } = statusChangeTarget;
+
+      // On-chain registration before off-chain if we are activating
+      if (newStatus === "active" && user.status === "pending") {
+        try {
+          // Normalize the wallet ID to lowercase to bypass strict ethers v6 EIP-55 checksum validation if the user provided mixed case
+          const safeWalletId = user.walletId.toLowerCase();
+
+          if (user.role === "manufacturer") {
+            await addManufacturer(safeWalletId);
+          } else if (user.role === "distributor") {
+            await addDistributor(safeWalletId);
+          } else if (user.role === "wholesaler") {
+            await addWholesaler(safeWalletId);
+          }
+          // The contract doesn't explicitly have pharmacist on-chain addition
+        } catch (blockchainErr: any) {
+          throw new Error("Blockchain registration failed: " + (blockchainErr?.message || "Unknown error"));
+        }
+      }
+
+      await axios.patch(`/api/user/${user.id}`, {
+        status: newStatus,
       });
       setStatusChangeTarget(null);
       await fetchUsers();
-    } catch (err) {
+    } catch (err: any) {
       let msg = "Failed to change status";
       if (axios.isAxiosError(err) && err.response?.data?.error) {
         msg = err.response.data.error;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      } else if (typeof err === "string") {
+        msg = err;
       }
       setStatusChangeError(msg);
     } finally {
@@ -192,13 +219,31 @@ const UsersPage = () => {
     setDeleting(true);
     setDeleteError(null);
     try {
+      // Try to remove from blockchain first if they might be registered
+      if (deleteTarget.status === "active" || deleteTarget.status === "rejected") {
+        try {
+          const safeWalletId = deleteTarget.walletId.toLowerCase();
+          await removeParticipant(safeWalletId);
+        } catch (blockchainErr: any) {
+          const msg = blockchainErr?.message || "";
+          // Ignore NotRegistered or execution reverted if they were never fully added
+          if (!msg.includes("NotRegistered") && !msg.includes("User is not registered") && !msg.includes("NotRegistered()")) {
+            throw new Error("Blockchain deletion failed: " + msg);
+          }
+        }
+      }
+
       await axios.delete(`/api/user/${deleteTarget.id}`);
       setDeleteTarget(null);
       await fetchUsers();
-    } catch (err) {
+    } catch (err: any) {
       let msg = "Failed to delete user";
       if (axios.isAxiosError(err) && err.response?.data?.error) {
         msg = err.response.data.error;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      } else if (typeof err === "string") {
+        msg = err;
       }
       setDeleteError(msg);
     } finally {

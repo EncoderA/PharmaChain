@@ -12,7 +12,7 @@ import { getAuthUser } from "@/lib/auth";
  */
 const ALLOWED_RELATIONS: Record<string, string[]> = {
   manufacturer: ["distributor", "wholesaler"],
-  distributor: ["pharmacist"],
+  distributor: ["wholesaler", "pharmacist"],
   wholesaler: ["pharmacist"],
 };
 

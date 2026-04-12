@@ -23,7 +23,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { useUser } from "@/contexts/user-context";
 import { CheckCircle2 } from "lucide-react";
 import axios from "axios";
-import { useSupplyChainContract } from "@/hooks/use-supply-chain-contract";
 
 export function RegisterForm() {
   const [loading, setLoading] = useState(false);
@@ -32,7 +31,6 @@ export function RegisterForm() {
   const [pendingSuccess, setPendingSuccess] = useState(false);
   const router = useRouter();
   const { refreshUser } = useUser();
-  const { registerAsManufacturer } = useSupplyChainContract();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -77,12 +75,7 @@ export function RegisterForm() {
     }
 
     try {
-      // Step 1: On-chain registration via MetaMask (manufacturers only)
-      if (role === "manufacturer") {
-        await registerAsManufacturer();
-      }
-
-      // Step 2: Save off-chain details to database
+      // Save off-chain details to database and set as pending
       const res = await axios.post("/api/auth/register", data);
 
       // If user is pending approval, show success message instead of redirecting
@@ -91,7 +84,7 @@ export function RegisterForm() {
         return;
       }
 
-      // Active users (manufacturers) are auto-logged in
+      // Fallback for auto-active users
       await refreshUser();
       router.push("/dashboard");
     } catch (err: any) {
@@ -257,9 +250,7 @@ export function RegisterForm() {
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  {role === "manufacturer"
-                    ? "Your wallet will be registered on-chain via MetaMask."
-                    : "Connect your MetaMask wallet to get your address."}
+                  Connect your MetaMask wallet to get your address.
                 </p>
               </div>
 

@@ -1,0 +1,565 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{multirow}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{PharmaChain: A Blockchain-Based Pharmaceutical Supply Chain Management System with QR Verification and Mobile Authentication}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Dr. S. A. Talekar}
+\IEEEauthorblockA{\textit{Dept. Information Technology} \\
+\textit{MVP K.B.T College of Engineering}\\
+Nashik, India \\
+talekar.sopan@kbtcoe.org}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd}Mr. Om Dhumal}
+\IEEEauthorblockA{\textit{Dept. Information Technology} \\
+\textit{MVP K.B.T College of Engineering}\\
+Nashik, India \\
+dhumalom94@gmail.com}
+\and
+\IEEEauthorblockN{3\textsuperscript{nd}Mr. Siddhant Jagtap}
+\IEEEauthorblockA{\textit{Dept. Information Technology} \\
+\textit{MVP K.B.T College of Engineering}\\
+Nashik, India \\
+siddhantjagtap78@gmail.com}
+\and
+\IEEEauthorblockN{4\textsuperscript{nd}Mr. Rohan Nagare}
+\IEEEauthorblockA{\textit{Dept. Information Technology} \\
+\textit{MVP K.B.T College of Engineering}\\
+Nashik, India \\
+rohannagare8355@gmail.com}
+\and
+\IEEEauthorblockN{5\textsuperscript{nd}Mr. Ankush Khairnar}
+\IEEEauthorblockA{\textit{Dept. Information Technology} \\
+\textit{MVP K.B.T College of Engineering}\\
+Nashik, India \\
+ankushkhairnar12@gmail.com}
+\and
+}
+
+\maketitle
+
+\begin{abstract}
+The World Health Organization estimates that counterfeit medications cause almost 200,000 deaths annually, posing a major threat to public health globally. It is challenging to confirm drug authenticity at any stage of the distribution process because traditional supply chain systems are opaque and vulnerable to data manipulation. This paper introduces PharmaChain, a decentralized system for managing the pharmaceutical supply chain. It uses Ethereum smart contracts along with an off-chain PostgreSQL database to ensure complete drug
+traceability.The system has a role-based access control model. This is enforced both on-chain through Solidity modifiers and off-chain using JWT authenticated API routes. It supports four roles: Manufacturer, Distributor, Wholesaler, and Admin.The four stages of a drug's lifecycle are manufacturing, distribution, wholesale, and sale. Every change is permanently documented on the blockchain. An auto-generated QR hash system allows consumers to check drug authenticity through a mobile app based on React.This app retrieves real time on-chain verification results by scanning QR codes.Next.js 16 and React 19 are used in the development of the web application. Ethers.js 6 is used to integrate MetaMask for wallet based authentication. Experimental results show that the system effectively prevents unauthorized stage transitions,detects expired and rejected drugs, and provides a complete
+ownership history for any registered pharmaceutical product.
+\end{abstract}
+
+\begin{IEEEkeywords}
+blockchain, pharmaceutical supply chain, smart contracts, Ethereum, drug traceability, QR verification, mobile application, counterfeit detection, decentralized application
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+The pharmaceutical industry operates one of the most critical and complex supply chains in the global economy. A drug's journey from raw material to end consumer involves multiple intermediaries, including manufacturers, distributors, wholesalers, and retail pharmacies. This complexity creates numerous opportunities for counterfeit drugs to enter the legitimate supply chain. The World Health Organization estimates that up to 10\% of pharmaceutical products in low- and middle-income countries are substandard or falsified \cite{b1}, while the FBI reports that counterfeit drugs contribute to nearly 200,000 deaths annually worldwide \cite{b2}.
+
+Traditional supply chain management systems rely on centralized databases controlled by individual stakeholders. These systems suffer from several critical limitations: (i) data silos that prevent cross-organizational visibility, (ii) single points of failure that are vulnerable to tampering, (iii) lack of immutable audit trails for regulatory compliance, and (iv) inability for end consumers to independently verify drug authenticity \cite{b3}.
+
+Blockchain technology, with its inherent properties of decentralization, immutability, and transparency, offers a compelling solution to these challenges. By recording each ownership transfer on a distributed ledger, blockchain creates a tamper-proof history of a drug's journey through the supply chain. Smart contracts further automate business logic, enforcing role-based permissions and stage-specific validation rules without requiring a trusted intermediary \cite{b4}.
+
+This paper presents PharmaChain, a fully functional decentralized application (DApp) that addresses the challenges of pharmaceutical supply chain management. The key contributions of this work are:
+
+\begin{itemize}
+\item A \textbf{modular smart contract architecture} comprising three layered contracts (Roles, Admin, SupplyChain) that enforce hierarchical role-based access control on-chain.
+\item A \textbf{hybrid on-chain/off-chain data model} that stores critical drug identity and ownership data on the Ethereum blockchain while maintaining user profiles and transactional metadata in PostgreSQL via Drizzle ORM.
+\item An \textbf{auto-generated QR hash verification mechanism} that produces a unique, on-chain QR hash at drug registration time, enabling consumers to verify drug authenticity without requiring blockchain expertise.
+\item A \textbf{dedicated mobile application} built with React that provides QR code scanning and real-time drug verification, making the system accessible to end consumers.
+\item A \textbf{production-grade web application} built with Next.js 16, React 19, and ethers.js 6 that provides role-aware dashboards, transaction tracking, and comprehensive supply chain management.
+\end{itemize}
+
+The remainder of this paper is organized as follows: Section II reviews related work. Section III describes the system architecture. Section IV details the smart contract design. Section V covers the implementation. Section VI presents the results and evaluation. Section VII concludes the paper with future directions.
+
+\section{Related Work}
+
+Several blockchain-based solutions have been proposed in the literature to improve how pharmaceutical supply chains are managed.
+
+Moosavi et al. \cite{b5} proposed a blockchain-based method for tracking supply chains from start to finish. They used Ethereum and focused on integrating the Internet of Things (IoT) to monitor cold chains. However, their system didn't include a way for consumers to verify information, and it also didn't have detailed access controls based on roles at the smart contract level.
+
+Uddin et al. \cite{b6} presented a blockchain-based multi-agent system for drug supply chain integrity. Their work employed a permissioned blockchain with consensus-based validation but relied on a custom blockchain implementation rather than a well-established platform like Ethereum, limiting interoperability and tooling support.
+
+Sylim et al. \cite{b7} explored the application of blockchain for pharmaceutical supply chain in the context of the Drug Supply Chain Security Act (DSCSA). Their framework addressed regulatory compliance but was primarily theoretical and lacked a working implementation.
+
+Xu et al. \cite{b8} conducted a comprehensive survey on blockchain applications in drug supply chains, identifying key challenges including scalability, interoperability, privacy, and regulatory alignment. They emphasized the need for hybrid architectures that combine on-chain immutability with off-chain data management for practical deployment.
+
+Haq and Esuka \cite{b9} developed MediLinker, a blockchain-based medicine supply chain platform using Hyperledger Fabric. While their work demonstrated enterprise-grade features, the permissioned nature of Hyperledger limits public verifiability, which is essential for consumer trust.
+
+Table~\ref{tab:comparison} provides a comparative analysis of PharmaChain with existing approaches.
+
+\begin{table}[htbp]
+\caption{Comparison with Existing Systems}
+\begin{center}
+\begin{tabular}{|p{1.8cm}|c|c|c|c|}
+\hline
+\textbf{Feature} & \textbf{\cite{b5}} & \textbf{\cite{b6}} & \textbf{\cite{b9}} & \textbf{Ours} \\
+\hline
+Public Blockchain & Yes & No & No & Yes \\
+\hline
+On-chain RBAC & No & Partial & Yes & Yes \\
+\hline
+QR Verification & No & No & No & Yes \\
+\hline
+Hybrid Storage & No & No & Yes & Yes \\
+\hline
+Working DApp & No & Partial & Yes & Yes \\
+\hline
+Mobile App & No & No & No & Yes \\
+\hline
+Consumer Portal & No & No & No & Yes \\
+\hline
+\end{tabular}
+\label{tab:comparison}
+\end{center}
+\end{table}
+
+PharmaChain differentiates itself by combining on-chain role-based access control, auto-generated QR verification, a dual on-chain/off-chain storage model, a dedicated mobile verification app, and a fully functional consumer-facing verification portal within a single, cohesive system.
+
+\section{System Architecture}
+
+\subsection{High-Level Overview}
+
+PharmaChain follows a three-tier architecture comprising a \textbf{blockchain layer}, an \textbf{application backend}, and a \textbf{frontend layer}, as illustrated in Fig.~\ref{fig:architecture}.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\columnwidth]{Architeature supply.png}}
+\caption{PharmaChain system architecture}
+\label{fig:architecture}
+\end{figure}
+
+
+\begin{itemize}
+\item \textbf{Blockchain Layer:} Ethereum-compatible smart contracts deployed on a test network, managing drug registration, ownership transfers, role management, and QR-based verification.
+\item \textbf{Application Backend:} Next.js API routes serving as a middleware layer, connecting to a PostgreSQL database via Drizzle ORM for off-chain data, and handling JWT-based authentication.
+\item \textbf{Web Frontend:} A React 19 single-page application with role-aware dashboards, MetaMask wallet integration, product management, transaction tracking, and analytics.
+\item \textbf{Mobile Application:} A React-based mobile app that provides QR code scanning, on-chain drug verification, and displays drug details including authenticity status, ownership history, and expiry information.
+\end{itemize}
+
+\subsection{Stakeholder Roles}
+
+The system defines four distinct roles as shown in Fig.~\ref{fig:architecture}, each with specific permissions enforced at the smart contract level:
+
+
+% NOTE: Replace 'role_hierarchy.png' with a diagram showing:
+% Admin -> Manufacturer -> Distributor -> Wholesaler -> Consumer
+% With permissions listed under each role
+
+\begin{enumerate}
+\item \textbf{Admin:} Manages participants across the supply chain. Can add/remove manufacturers and oversee all system operations.
+\item \textbf{Manufacturer:} Registers new drugs on the blockchain, adds distributors and wholesalers under their hierarchy, and initiates the first transfer (Manufactured $\rightarrow$ Distributed).
+\item \textbf{Distributor:} Receives drugs from manufacturers and transfers them to wholesalers (Distributed $\rightarrow$ Wholesaled).
+\item \textbf{Wholesaler (Pharmacist):} Receives drugs from distributors and sells to end consumers (Wholesaled $\rightarrow$ Sold).
+\end{enumerate}
+
+\subsection{Drug Lifecycle}
+
+Each drug registered on PharmaChain progresses through a four-stage lifecycle as:
+
+\begin{equation}
+\text{Manufactured} \xrightarrow{T_1} \text{Distributed} \xrightarrow{T_2} \text{Wholesaled} \xrightarrow{T_3} \text{Sold}
+\label{eq:lifecycle}
+\end{equation}
+
+where $T_1$, $T_2$, and $T_3$ represent ownership transfer transactions recorded on the blockchain. Each transition is validated by the smart contract to ensure: (i) the caller holds the correct role, (ii) the drug is at the expected stage, (iii) the drug has not expired, and (iv) the drug has not been rejected. At any stage, an authorized participant may reject a drug, effectively halting its progression through the supply chain.
+
+
+
+\subsection{Hybrid Data Model}
+
+PharmaChain employs a hybrid on-chain/off-chain data model to balance immutability, cost, and performance. It illustrates the data distribution across the two storage layers.
+
+
+
+\textbf{On-chain data} (stored in Ethereum smart contracts):
+\begin{itemize}
+\item Drug identity: ID, name, manufacturer address, QR hash
+\item Drug state: current owner, lifecycle stage, timestamps
+\item Ownership history: sequential list of wallet addresses
+\item Role mappings: admin, manufacturer, distributor, wholesaler
+\item Hierarchy: manufacturer-distributor and manufacturer-wholesaler relationships
+\end{itemize}
+
+\textbf{Off-chain data} (stored in PostgreSQL via Drizzle ORM):
+\begin{itemize}
+\item User profiles: full name, organization, email, phone, wallet ID
+\item Product metadata: product code, category, batch number, stock count
+\item Transaction records: action type, from/to user IDs, transaction hash, block number
+\item Consumer sales: consumer details, quantity, sale timestamp
+\item Supply chain relations: supply-from/supply-to user mappings
+\end{itemize}
+
+\section{Smart Contract Design}
+
+\subsection{Contract Architecture}
+
+The smart contract layer consists of three Solidity contracts organized in an inheritance hierarchy . The contracts are compiled with Solidity version 0.8.19 and leverage custom errors for gas-efficient revert messages.
+
+
+
+\begin{enumerate}
+\item \textbf{Roles.sol} (base contract): Defines role storage mappings (\texttt{admins}, \texttt{manufacturers}, \texttt{distributors}, \texttt{wholesalers}), participant address lists, hierarchy mappings (\texttt{registeredUnder}, \texttt{manufacturerDistributors}, \texttt{manufacturerWholesalers}), and four access control modifiers.
+\item \textbf{Admin.sol} (extends Roles): Implements participant management including add/remove functions for all roles. The constructor assigns the deployer as the initial admin. Manufacturers can register distributors and wholesalers under their own hierarchy, creating a tree-structured organizational model.
+\item \textbf{SupplyChain.sol} (extends Admin): Implements the core drug lifecycle functions --- \texttt{registerDrug}, \texttt{transferToDistributor}, \texttt{transferToWholesaler}, \texttt{markAsSold}, \texttt{rejectDrug} --- along with view functions for drug details, journey tracking, and QR verification.
+\end{enumerate}
+
+\subsection{Drug Registration and QR Hash Generation}
+
+When a manufacturer registers a drug, the contract auto-generates a unique QR hash using the Keccak-256 hashing algorithm. The hash combines four entropy sources the sequential drug counter, the manufacturer's wallet address, the drug name, and the current block number. This combination ensures that each QR hash is unique and practically impossible to forge.
+
+
+The resulting QR hash is stored on-chain as part of the Drug struct and simultaneously saved off-chain in the \texttt{blockchainHash} column of the products table. This hash is then encoded into a physical QR code that is printed on the drug packaging, enabling end-to-end verification.
+
+\subsection{Transfer Validation}
+
+Each ownership transfer function in the smart contract enforces multiple validation checks through custom errors for gas efficiency. It illustrates the validation flow for a drug transfer operation.
+
+
+The same validation pattern applies to \texttt{transferToWholesaler} and \texttt{markAsSold}, with stage-specific checks corresponding to their position in the lifecycle. Table~\ref{tab:rbac} summarizes the complete access control matrix.
+
+\begin{table}[htbp]
+\caption{Role-Based Access Control Matrix}
+\begin{center}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Function} & \textbf{Admin} & \textbf{Mfr} & \textbf{Dist} & \textbf{Whsl} \\
+\hline
+addManufacturer & \checkmark & $\times$ & $\times$ & $\times$ \\
+\hline
+registerDrug & $\times$ & \checkmark & $\times$ & $\times$ \\
+\hline
+transferToDistributor & $\times$ & \checkmark & $\times$ & $\times$ \\
+\hline
+transferToWholesaler & $\times$ & $\times$ & \checkmark & $\times$ \\
+\hline
+markAsSold & $\times$ & $\times$ & $\times$ & \checkmark \\
+\hline
+rejectDrug & \checkmark & \checkmark & \checkmark & \checkmark \\
+\hline
+verifyDrugByQR & \multicolumn{4}{c|}{Public (any user)} \\
+\hline
+\end{tabular}
+\label{tab:rbac}
+\end{center}
+\end{table}
+
+\subsection{QR-Based Verification}
+
+The \texttt{verifyDrugByQR} function allows anyone to verify a drug's authenticity by providing the drug ID and scanned QR hash. Fig.~\ref{fig:verify_flow} shows the result of verification of drugs.
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\columnwidth]{Verification.png}}
+\caption{QR verification Result output.}
+\label{fig:verify_flow}
+\end{figure}
+
+A drug is considered authentic only when all three conditions are met: the QR hash matches the on-chain record, the drug has not expired (based on block timestamp), and the drug has not been rejected by any authorized participant.
+
+\section{Implementation}
+
+\subsection{Technology Stack}
+
+Table~\ref{tab:techstack} summarizes the complete technology stack used in PharmaChain.
+
+\begin{table}[htbp]
+\caption{Technology Stack}
+\begin{center}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Component} & \textbf{Technology} \\
+\hline
+Web framework & Next.js 16 with React 19 \\
+\hline
+Language & TypeScript (strict mode) \\
+\hline
+UI components & shadcn/ui (New York style) \\
+\hline
+Styling & Tailwind CSS 4, CSS variables \\
+\hline
+Blockchain interaction & ethers.js 6, MetaMask \\
+\hline
+Smart contracts & Solidity 0.8.19, Ethereum \\
+\hline
+Database & PostgreSQL \\
+\hline
+ORM & Drizzle ORM \\
+\hline
+Authentication & JWT (jose), bcrypt \\
+\hline
+Charts \& analytics & Recharts \\
+\hline
+Form handling & react-hook-form \\
+\hline
+Animations & Framer Motion \\
+\hline
+Mobile app & React (QR scanner) \\
+\hline
+QR code generation & qrcode.react \\
+\hline
+Build tool & Turbopack \\
+\hline
+\end{tabular}
+\label{tab:techstack}
+\end{center}
+\end{table}
+
+\subsection{Web Application}
+
+The web application follows the Next.js App Router pattern with route groups for layout separation. The dashboard provides a comprehensive supply chain management interface.
+
+
+The dashboard is organized into the following key modules:
+
+\begin{itemize}
+\item \textbf{Dashboard:} Overview with key metrics (total products, transactions processed, active supply chains), transaction summary charts powered by Recharts, and a live supply chain activity feed showing recent events.
+\item \textbf{Products:} Product listing with search and filter capabilities, add product form with frontend validation, product details dialog, and product transfer actions (transfer to distributor, transfer to wholesaler, sell to consumer).
+\item \textbf{Transactions:} Complete transaction history with status tracking (Confirmed, Pending, Failed), block number references, and links to on-chain transaction details.
+\item \textbf{Reports:} Analytics dashboard with time-range filtering, role-specific data aggregation, and visual representations of supply chain performance.
+\end{itemize}
+
+\subsubsection{Product Management}
+
+The product management interface enables stakeholders to register, track, and transfer drugs through the supply chain.
+
+
+\subsubsection{Product Transfer and Tracking}
+
+When a stakeholder initiates a transfer, the system triggers a MetaMask transaction that calls the appropriate smart contract function.
+Fig.~\ref{fig:track_product} shows the ownership journey view.
+
+
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=\columnwidth]{Drug lifecycle.png}}
+\caption{Product tracking and ownership journey of a drug. }
+\label{fig:track_product}
+\end{figure}
+Each stage displays the stakeholder's wallet address, organization name, and the timestamp of the transfer transaction.
+
+
+\subsubsection{Transaction History}
+
+The transactions page provides a comprehensive view of all supply chain events.
+
+
+
+
+\subsection{Mobile Application for QR Verification}
+
+A critical component of PharmaChain is the dedicated mobile application built with React, which provides end consumers with a simple mechanism to verify drug authenticity.
+
+
+The mobile application provides the following features:
+
+\begin{itemize}
+\item \textbf{QR Code Scanning:} Uses the device camera to scan QR codes printed on drug packaging. The QR code encodes the drug ID and the auto-generated QR hash.
+\item \textbf{Real-Time Verification:} Sends the scanned data to the PharmaChain public verification API endpoint (\texttt{/api/public/verify}), which calls the smart contract's \texttt{verifyDrugByQR} view function.
+\item \textbf{Drug Details Display:} Shows comprehensive drug information including authenticity status, expiry status, rejection status, current lifecycle stage, and the current owner's address.
+\item \textbf{Visual Feedback:} Provides clear visual indicators to communicate whether a drug is authentic or potentially counterfeit.
+
+
+% Fig.~\ref{fig:mobile_result} show 
+\item \textbf{The mobile app's scanning and result screens: }The mobile app showing drug details after a successful QR scan. The screen displays the drug name, authenticity status (Authentic/Counterfeit), expiry information, current lifecycle stage, manufacturer details, and the complete ownership journey.
+
+
+
+\end{itemize}
+
+
+\subsection{Database Schema}
+
+The off-chain database consists of five tables managed by Drizzle ORM.
+
+
+
+\begin{enumerate}
+\item \textbf{users:} Stores user profiles with fields for fullName, organization, email, phone, role (enum: manufacturer, distributor, pharmacist, wholesaler, admin), walletId, password (bcrypt-hashed), and status (active/pending/rejected).
+\item \textbf{products:} Tracks product metadata including productCode, name, category, batch, stock, status (Verified/Pending/Expired/Rejected/Sold), manufacturerId, currentOwnerId, onChainDrugId, and blockchainHash.
+\item \textbf{transactions:} Records each supply chain event with action, fromUserId, toUserId, txHash, blockNumber, and status (Confirmed/Pending/Failed).
+\item \textbf{consumer sales:} Captures final sale to consumers with consumerName, consumerPhone, consumerAddress, quantity, and timestamp.
+\item \textbf{supply chain relations:} Maps supply-from/supply-to user relationships for the distribution hierarchy.
+\end{enumerate}
+
+\subsection{Authentication Flow}
+
+PharmaChain implements a dual authentication mechanism.
+
+
+
+
+\begin{enumerate}
+\item \textbf{Web authentication:} Email/password-based login with bcrypt-hashed passwords and JWT tokens (via jose library) stored in HTTP-only cookies. The \texttt{AuthProvider} context manages session state across the application.
+\item \textbf{Blockchain authentication:} MetaMask wallet connection via ethers.js \texttt{BrowserProvider}. The wallet address is used to identify the user's on-chain role and authorize smart contract transactions.
+\end{enumerate}
+
+Both mechanisms must align a user's JWT authenticated session must correspond to a wallet address that holds the appropriate on-chain role for the requested operation.
+
+\subsection{Landing Page and Public Interface}
+
+The public-facing landing page provides information about PharmaChain's features and a verification portal accessible without authentication.
+
+
+
+\section{Results and Evaluation}
+
+\subsection{Functional Testing}
+
+We evaluated PharmaChain across four key functional areas to verify the correctness and security of the system.
+
+\subsubsection{Role-Based Access Control}
+Each smart contract function was tested to verify that role-specific modifiers correctly prevent unauthorized access. All 18 contract functions were tested across all four roles, confirming that unauthorized calls correctly revert with appropriate error messages. The complete access control matrix is presented in Table~\ref{tab:rbac}.
+
+\subsubsection{Drug Lifecycle Validation}
+We verified that the sequential stage model (Eq.~\ref{eq:lifecycle}) is strictly enforced. Attempting to skip stages (e.g., transferring a Manufactured drug directly to a Wholesaler) correctly reverts with the \texttt{InvalidStage} error. Expired drugs are blocked by the \texttt{notExpired} modifier, and rejected drugs are blocked by the \texttt{Rejected} error check.
+
+
+\subsubsection{QR Verification Accuracy}
+The \texttt{verifyDrugByQR} function was tested across multiple scenarios using both the web portal and the mobile application. Table~\ref{tab:qr_test} summarizes the test cases and results.
+
+\begin{table}[htbp]
+\caption{QR Verification Test Results}
+\begin{center}
+\begin{tabular}{|p{2.5cm}|c|c|c|}
+\hline
+\textbf{Test Scenario} & \textbf{Authentic} & \textbf{Expired} & \textbf{Rejected} \\
+\hline
+Valid drug, matching hash & True & False & False \\
+\hline
+Valid drug, wrong hash & False & False & False \\
+\hline
+Expired drug & False & True & False \\
+\hline
+Rejected drug & False & False & True \\
+\hline
+Non-existent drug ID & False & False & False \\
+\hline
+\end{tabular}
+\label{tab:qr_test}
+\end{center}
+\end{table}
+
+Fig.~\ref{fig:verify_flow} shows the verification results as displayed in the web interface. 
+
+\subsubsection{Ownership Journey Tracking}
+The \texttt{getDrugJourney} function correctly returns the complete ordered list of wallet addresses that have held ownership of a drug. Fig.~\ref{fig:track_product} demonstrates the journey tracking feature.
+
+
+\subsection{Gas Cost Analysis}
+
+Table~\ref{tab:gas} shows the gas costs for key smart contract operations, measured on the Ethereum test network.
+
+\begin{table}[htbp]
+\caption{Gas Costs for Key Operations}
+\begin{center}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Operation} & \textbf{Approx. Gas Cost} \\
+\hline
+registerDrug & $\sim$150,000 \\
+\hline
+transferToDistributor & $\sim$65,000 \\
+\hline
+transferToWholesaler & $\sim$65,000 \\
+\hline
+markAsSold & $\sim$55,000 \\
+\hline
+rejectDrug & $\sim$30,000 \\
+\hline
+addManufacturer & $\sim$50,000 \\
+\hline
+verifyDrugByQR (view) & 0 (no gas) \\
+\hline
+getDrugJourney (view) & 0 (no gas) \\
+\hline
+\end{tabular}
+\label{tab:gas}
+\end{center}
+\end{table}
+
+The \texttt{registerDrug} function incurs the highest gas cost due to struct storage and QR hash computation. View functions such as \texttt{verifyDrugByQR} and \texttt{getDrugJourney} require no gas, making consumer verification and journey tracking completely free of cost.
+
+\subsection{Security Analysis}
+
+PharmaChain addresses several threat vectors:
+
+\begin{itemize}
+\item \textbf{Unauthorized access:} On-chain modifiers and off-chain JWT authentication ensure only authorized users can perform role-specific actions.
+\item \textbf{Data tampering:} Critical drug identity and ownership data stored on the Ethereum blockchain is immutable and publicly auditable.
+\item \textbf{Counterfeit injection:} The QR hash, generated from the drug counter, manufacturer address, drug name, and block number, creates a unique identifier that cannot be forged without access to the manufacturer's private key.
+\item \textbf{Replay attacks:} Each drug has a unique sequential ID, and transfers are one-directional through the stage enum, preventing re-use of previous transaction data.
+\item \textbf{Password security:} User passwords are hashed using bcrypt before database storage, and JWT tokens are stored in HTTP-only cookies to prevent XSS attacks.
+\item \textbf{QR code tampering:} Even if a QR code is duplicated, the on-chain verification reveals the true ownership status and stage, immediately exposing inconsistencies.
+\end{itemize}
+
+\subsection{User Interface Evaluation}
+
+The reports and analytics dashboard that provides stakeholders with visual insights into supply chain performance.
+
+
+\section{Conclusion and Future Work}
+
+This paper presented PharmaChain, a blockchain-based pharmaceutical supply chain management system that provides end-to-end drug traceability, role-based access control, and QR-based consumer verification through both a web application and a dedicated mobile application. The system employs a hybrid on-chain/off-chain architecture that stores critical identity and ownership data immutably on the Ethereum blockchain while maintaining operational metadata in PostgreSQL for performance and cost efficiency.
+
+The modular smart contract design, comprising Roles, Admin, and SupplyChain contracts, enforces strict role-based permissions and sequential drug lifecycle transitions. The auto-generated QR hash mechanism, combined with the React-based mobile scanning application, provides an accessible consumer verification tool that bridges the gap between blockchain technology and everyday users without requiring any blockchain expertise.
+
+Key areas for future work include:
+
+\begin{itemize}
+\item \textbf{Layer 2 scaling:} Migrating smart contracts to a Layer 2 solution (e.g., Polygon, Optimism) to reduce gas costs and improve transaction throughput for enterprise-scale deployment.
+\item \textbf{IoT integration:} Incorporating temperature and humidity sensors for cold chain monitoring of temperature-sensitive pharmaceuticals, with sensor data anchored to the blockchain.
+\item \textbf{Zero-knowledge proofs:} Implementing privacy-preserving verification using zk-SNARKs, allowing supply chain participants to prove drug authenticity without revealing sensitive business data.
+\item \textbf{Inter-organizational interoperability:} Developing cross-chain bridges to enable communication between multiple pharmaceutical supply chain networks operating on different blockchain platforms.
+\item \textbf{Regulatory compliance:} Extending the system to support the Drug Supply Chain Security Act (DSCSA) requirements, including serialization, verification, and electronic interoperable tracing.
+\item \textbf{Advanced mobile features:} Enhancing the mobile application with offline verification caching, augmented reality drug information overlay, and push notifications for drug recall alerts.
+\end{itemize}
+
+\section*{Acknowledgment}
+
+The authors would like to thank the Department of Information Technology Engineering for providing the infrastructure and guidance necessary for this research.
+
+\begin{thebibliography}{00}
+
+\bibitem{b1} World Health Organization, ``A study on the public health and socioeconomic impact of substandard and falsified medical products,'' WHO, Geneva, 2020.
+
+\bibitem{b2} Federal Bureau of Investigation, ``Intellectual property theft/piracy,'' FBI Reports, 2020. [Online]. Available: https://www.fbi.gov/investigate/white-collar-crime
+
+\bibitem{b3} T. K. Mackey and G. Nayyar, ``A review of existing and emerging digital technologies to combat the global trade in fake medicines,'' Expert Opinion on Drug Safety, vol. 16, no. 5, pp. 587--602, 2020.
+
+\bibitem{b4}W. Chien, J. d. Jesus, B. Taylor, V. Dods, L. Alekseyev, D. Shoda, and P. B. Shieh, "The Last Mile: DSCSA Solution Through Blockchain Technology: Drug Tracking, Tracing, and Verification at the Last Mile of the Pharmaceutical Supply Chain with BRUINchain," \textit{Blockchain in Healthcare Today}, vol. 3, 2024
+
+\bibitem{b5} J. Moosavi, L. M. Naeni, A. M. Fathollahi-Fard, and U. Fiore, ``Blockchain in supply chain management: A review, bibliometric, and network analysis,'' Environmental Science and Pollution Research, vol. 28, pp. 68602--68628, 2021.
+
+\bibitem{b6} M. Uddin, K. Salah, R. Jayaraman, S. Pesic, and S. Al-Saqaf, ``Blockchain for drug traceability: Architectures and open challenges,'' Health Informatics Journal, vol. 27, no. 2, 2021.
+
+\bibitem{b7} P. Sylim, F. Liu, A. Marcelo, and P. Fontelo, ``Blockchain technology for detecting falsified and substandard drugs in distribution: Pharmaceutical supply chain intervention,'' JMIR Research Protocols, vol. 7, no. 9, e10163, 2018.
+
+\bibitem{b8} X. Xu, N. Tian, H. Gao, H. Lei, Z. Liu, and Z. Liu, ``A survey on application of blockchain technology in drug supply chain,'' in Proc. 8th International Conference on Big Data Analytics (ICBDA), pp. 176--183, March 2023.
+
+\bibitem{b9} I. Haq and O. M. Esuka, ``Blockchain technology in pharmaceutical industry to prevent counterfeit drugs,'' International Journal of Computer Applications, vol. 180, no. 25, pp. 8--12, 2018.
+
+\bibitem{b10} V. Buterin, ``Ethereum: A next-generation smart contract and decentralized application platform,'' Ethereum White Paper, 2014.
+
+\bibitem{b11} G. Wood, ``Ethereum: A secure decentralised generalised transaction ledger,'' Ethereum Yellow Paper, 2014.
+
+\bibitem{b12} N. Kshetri, ``Blockchain's roles in meeting key supply chain management objectives,'' International Journal of Information Management, vol. 39, pp. 80--89, 2018.
+
+\bibitem{b13} T. Ali Syed, A. Alzahrani, S. Jan, M. S. Siddiqui, A. Nadeem 
+and T. Alghamdi, "A Comparative Analysis of Blockchain Architecture and its Applications: Problems and Recommendations," in \textit{IEEE Access}, vol. 7, pp. 176838-176869, 2019, doi: 10.1109/ACCESS.2019.2957660.
+
+\bibitem{b14} M. Debe, K. Salah, R. Jayaraman, and J. Arshad, ”Blockchain-based
+Verifiable Tracking of Resellable Returned Drugs,” IEEE Access, vol.
+8, pp. 205848-205862, 2022.
+
+
+
+\end{thebibliography}
+
+\end{document}

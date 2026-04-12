@@ -49,7 +49,7 @@ import axios from "axios";
 // Roles to manage based on the current user's role
 const ALLOWED_BUYER_ROLES: Record<string, string[]> = {
   manufacturer: ["distributor", "wholesaler"],
-  distributor: ["pharmacist"],
+  distributor: ["wholesaler", "pharmacist"],
   wholesaler: ["pharmacist"],
 };
 
@@ -266,10 +266,14 @@ export default function BuyersPage() {
 
   if (!isAuthorized) return null;
 
-  const roleLabel =
-    currentUser!.role === "manufacturer"
-      ? "Distributors & Wholesalers"
-      : "Pharmacists";
+  let roleLabel = "";
+  if (currentUser!.role === "manufacturer") {
+    roleLabel = "Distributors & Wholesalers";
+  } else if (currentUser!.role === "distributor") {
+    roleLabel = "Wholesalers & Pharmacists";
+  } else {
+    roleLabel = "Pharmacists";
+  }
 
   return (
     <div className="p-6 bg-background space-y-6">
