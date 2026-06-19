@@ -1,3 +1,5 @@
+import { About } from "@/components/landingpage/About";
+import { Contact } from "@/components/landingpage/Contact";
 import { CTA } from "@/components/landingpage/CTA";
 import Demo from "@/components/landingpage/demo";
 import { FAQ } from "@/components/landingpage/FAQ";
@@ -6,6 +8,7 @@ import Flow from "@/components/landingpage/Flow";
 import Footer  from "@/components/landingpage/Footer";
 import { Header } from "@/components/landingpage/Header";
 import HeroSection from "@/components/landingpage/HeroSection";
+import { Services } from "@/components/landingpage/Services";
 import { Section } from "@/components/ui/Section";
 
 export default function Home() {
@@ -14,12 +17,20 @@ export default function Home() {
       <Header />
       <div className="min-w-full mx-auto border-t border-accent absolute top-20" />
 
-      <Section isFirst>
+      <Section isFirst id="home">
         <HeroSection />
+      </Section>
+
+      <Section id="about">
+        <About />
       </Section>
 
       <Section>
         <Demo />
+      </Section>
+
+      <Section id="services">
+        <Services />
       </Section>
 
       <Section>
@@ -32,6 +43,10 @@ export default function Home() {
 
       <Section>
         <FAQ />
+      </Section>
+
+      <Section id="contact">
+        <Contact />
       </Section>
 
       <Section>

@@ -1,15 +1,17 @@
 export const Section = ({
   children,
   isFirst = false,
+  id,
 }: {
   children: React.ReactNode;
   isFirst?: boolean;
+  id?: string;
 }) => (
   <>
     {!isFirst && (
       <div className="min-w-full border-t mx-auto border-accent" />
     )}
-    <div className={`relative ${isFirst ? "mt-[27px]" : ""} max-w-7xl mx-auto`}>
+    <div id={id} className={`relative ${isFirst ? "mt-[27px]" : ""} max-w-7xl mx-auto scroll-mt-24`}>
       <div className="border-l border-r border-accent">{children}</div>
       {!isFirst && (
         <>

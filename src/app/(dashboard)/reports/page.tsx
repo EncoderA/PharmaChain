@@ -69,10 +69,51 @@ const ReportsPage = () => {
     fetchData();
   }, [timeRange]);
 
+  const handleExport = () => {
+    if (!data) return;
+    
+    let csvContent = "data:text/csv;charset=utf-8,";
+    
+    // Key Metrics
+    csvContent += "Key Metrics\nTitle,Value,Change\n";
+    data.metrics.forEach((m: any) => {
+      csvContent += `"${m.title}","${m.value}","${m.change}"\n`;
+    });
+    csvContent += "\n";
+
+    // Supply Chain Performance
+    csvContent += "Supply Chain Performance\nDate,Total Products,Journey Completed,Expired\n";
+    data.performanceData.forEach((d: any) => {
+      csvContent += `"${d.month}","${d.totalProducts}","${d.journeyCompleted}","${d.expired}"\n`;
+    });
+    csvContent += "\n";
+    
+    // Transaction Data
+    csvContent += "Transaction Volume & Value\nDate,Transactions,Value (USD)\n";
+    data.transactionData.forEach((d: any) => {
+      csvContent += `"${d.date}","${d.transactions}","${d.value}"\n`;
+    });
+    csvContent += "\n";
+
+    // Top Products
+    csvContent += "Top Selling Products\nID,Name,Status,Sales\n";
+    data.topProducts.forEach((p: any) => {
+      csvContent += `"${p.id}","${p.name}","${p.status}","${p.sales}"\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `pharmachain_report_${timeRange}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const chartConfig = {
-    completed: { label: "Completed", color: "#10b981" },
-    pending: { label: "Pending", color: "#f59e0b" },
-    delayed: { label: "Delayed", color: "#ef4444" },
+    totalProducts: { label: "Total Products", color: "#3b82f6" },
+    journeyCompleted: { label: "Journey Completed", color: "#10b981" },
+    expired: { label: "Expired", color: "#ef4444" },
     transactions: { label: "Transactions", color: "#3b82f6" },
     value: { label: "Value (USD)", color: "#8b5cf6" },
     onTime: { label: "On Time", color: "#10b981" },
@@ -96,9 +137,9 @@ const ReportsPage = () => {
     topProducts,
     metrics,
     partnersData,
-    summary
+    summary,
+    userRole
   } = data;
-
 
   const iconMap: Record<string, any> = {
     Zap,
@@ -131,7 +172,7 @@ const ReportsPage = () => {
               <SelectItem value="1year">Last Year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
@@ -166,20 +207,20 @@ const ReportsPage = () => {
           <CardHeader>
             <CardTitle>Supply Chain Performance</CardTitle>
             <CardDescription>
-              Completed, Pending, and Delayed shipments
+              Total Products, Journey Completed, and Expired
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
+            <ChartContainer config={chartConfig} className="h-[300px] w-full overflow-hidden">
               <BarChart data={performanceData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="month" />
                 <YAxis />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
-                <Bar dataKey="completed" fill="#10b981" radius={4} />
-                <Bar dataKey="pending" fill="#f59e0b" radius={4} />
-                <Bar dataKey="delayed" fill="#ef4444" radius={4} />
+                <Bar dataKey="totalProducts" fill="#3b82f6" radius={4} />
+                <Bar dataKey="journeyCompleted" fill="#10b981" radius={4} />
+                <Bar dataKey="expired" fill="#ef4444" radius={4} />
               </BarChart>
             </ChartContainer>
           </CardContent>
@@ -192,8 +233,8 @@ const ReportsPage = () => {
             <CardDescription>Current distribution</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-center">
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
-              <PieChart width={300} height={300}>
+            <ChartContainer config={chartConfig} className="h-[300px] w-full overflow-hidden">
+              <PieChart>
                 <Pie
                   data={statusData}
                   cx="50%"
@@ -222,7 +263,7 @@ const ReportsPage = () => {
             <CardDescription>Daily blockchain transactions</CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
+            <ChartContainer config={chartConfig} className="h-[300px] w-full overflow-hidden">
               <LineChart data={transactionData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="date" />
@@ -286,22 +327,29 @@ const ReportsPage = () => {
         </Card>
 
       </div>
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Partner Performance</CardTitle>
-            <CardDescription>On-time delivery rate</CardDescription>
+            <CardTitle>
+              {userRole === "admin" ? "Partner Performance" : "My Performance"}
+            </CardTitle>
+            <CardDescription>
+              {userRole === "admin"
+                ? "Total Products, Completed, and Expired per partner"
+                : "Your Total Products, Completed, and Expired"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px]">
+            <ChartContainer config={chartConfig} className="h-[300px] w-full overflow-hidden">
               <BarChart data={partnersData} layout="vertical">
                 <CartesianGrid vertical={false} />
                 <XAxis type="number" />
                 <YAxis dataKey="partner" type="category" width={120} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Legend />
-                <Bar dataKey="onTime" fill="#10b981" radius={4} />
-                <Bar dataKey="delayed" fill="#ef4444" radius={4} />
+                <Bar dataKey="totalProducts" fill="#3b82f6" radius={4} />
+                <Bar dataKey="completed" fill="#10b981" radius={4} />
+                <Bar dataKey="expired" fill="#ef4444" radius={4} />
               </BarChart>
             </ChartContainer>
           </CardContent>

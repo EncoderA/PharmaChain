@@ -1,0 +1,1 @@
+ALTER TABLE "consumer_sales" ALTER COLUMN "pharmacist_id" DROP NOT NULL;

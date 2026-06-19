@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
 import { productsTable, usersTable } from "@/db/schema";
-import { eq, ilike, or, sql, and } from "drizzle-orm";
+import { eq, ilike, or, sql, and, lt, notInArray, isNotNull } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 
 export async function GET(req: Request) {
@@ -10,6 +10,24 @@ export async function GET(req: Request) {
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+
+    // ─── Auto-expire products whose expiryDate has passed ───────────
+    // Updates all products with a past expiry date that aren't already
+    // marked as "Expired" or "Sold", ensuring the UI always shows
+    // accurate status without needing a separate cron job.
+    await db
+      .update(productsTable)
+      .set({
+        status: "Expired",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          isNotNull(productsTable.expiryDate),
+          lt(productsTable.expiryDate, new Date()),
+          notInArray(productsTable.status, ["Expired", "Sold"]),
+        ),
+      );
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");

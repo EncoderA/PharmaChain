@@ -46,7 +46,7 @@ export const usersTable = pgTable("users", {
   email: varchar({ length: 255 }).unique(),
   phone: varchar({ length: 12 }).notNull(),
   role: userRoleEnum("role").notNull(),
-  walletId: varchar({ length: 50 }).notNull(),
+  walletId: varchar({ length: 50 }), // nullable — pharmacists don't need a wallet
   password: varchar({ length: 255 }), // nullable — existing users have no password yet
   status: userStatusEnum("status").default("pending").notNull(),
 });
@@ -100,7 +100,7 @@ export const consumerSalesTable = pgTable("consumer_sales", {
   id: serial("id").primaryKey(),
   transactionId: integer("transaction_id").references(() => transactionsTable.id),
   productId: integer("product_id").references(() => productsTable.id).notNull(),
-  pharmacistId: integer("pharmacist_id").references(() => usersTable.id).notNull(),
+  pharmacistId: integer("pharmacist_id").references(() => usersTable.id),
   consumerName: varchar("consumer_name", { length: 255 }).notNull(),
   consumerPhone: varchar("consumer_phone", { length: 15 }),
   consumerAddress: varchar("consumer_address", { length: 500 }),

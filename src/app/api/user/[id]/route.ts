@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import db from "@/db/index";
-import { usersTable, productsTable, transactionsTable, supplyChainRelationsTable } from "@/db/schema";
+import { usersTable, productsTable, transactionsTable, supplyChainRelationsTable, consumerSalesTable } from "@/db/schema";
 import { eq, or } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth";
 
@@ -209,6 +209,12 @@ export async function DELETE(
       .update(transactionsTable)
       .set({ toUserId: null })
       .where(eq(transactionsTable.toUserId, userId));
+
+    // Consumer sales: nullify pharmacistId
+    await db
+      .update(consumerSalesTable)
+      .set({ pharmacistId: null })
+      .where(eq(consumerSalesTable.pharmacistId, userId));
 
     // Supply chain relations: delete all relations involving this user
     await db

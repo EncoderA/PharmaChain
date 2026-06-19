@@ -15,11 +15,18 @@ export async function POST(req: Request) {
       !body.password ||
       !body.role ||
       !body.organization ||
-      !body.phone ||
-      !body.walletId
+      !body.phone
     ) {
       return NextResponse.json(
-        { error: "All fields are required (including wallet address)" },
+        { error: "All required fields must be filled" },
+        { status: 400 },
+      );
+    }
+
+    // Wallet address is required for all roles except pharmacist
+    if (body.role !== "pharmacist" && !body.walletId) {
+      return NextResponse.json(
+        { error: "Wallet address is required" },
         { status: 400 },
       );
     }
@@ -54,17 +61,19 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if wallet already exists
-    const existingByWallet = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.walletId, body.walletId));
+    // Check if wallet already exists (skip for pharmacist since they don't have wallets)
+    if (body.walletId) {
+      const existingByWallet = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.walletId, body.walletId));
 
-    if (existingByWallet.length > 0) {
-      return NextResponse.json(
-        { error: "An account with this wallet address already exists" },
-        { status: 409 },
-      );
+      if (existingByWallet.length > 0) {
+        return NextResponse.json(
+          { error: "An account with this wallet address already exists" },
+          { status: 409 },
+        );
+      }
     }
 
     // Hash password
@@ -83,7 +92,7 @@ export async function POST(req: Request) {
         role: body.role,
         organization: body.organization,
         phone: body.phone,
-        walletId: body.walletId,
+        walletId: body.walletId || null,
         status,
       })
       .returning({

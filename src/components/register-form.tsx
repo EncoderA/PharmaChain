@@ -45,7 +45,7 @@ export function RegisterForm() {
       role,
       organization: formData.get("organization") as string,
       phone: formData.get("phone") as string,
-      walletId: formData.get("walletId") as string,
+      walletId: role === "pharmacist" ? "" : (formData.get("walletId") as string),
     };
 
     // Client-side validation
@@ -55,7 +55,7 @@ export function RegisterForm() {
       return;
     }
 
-    if (!data.walletId) {
+    if (role !== "pharmacist" && !data.walletId) {
       setError("Wallet address is required");
       setLoading(false);
       return;
@@ -237,22 +237,24 @@ export function RegisterForm() {
                 />
               </div>
 
-              {/* Wallet Address */}
-              <div className="grid gap-2">
-                <Label htmlFor="walletId">
-                  Wallet Address
-                  <span className="text-destructive text-xs ml-1">*</span>
-                </Label>
-                <Input
-                  id="walletId"
-                  name="walletId"
-                  placeholder="0x..."
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  Connect your MetaMask wallet to get your address.
-                </p>
-              </div>
+              {/* Wallet Address - hidden for pharmacist role */}
+              {role !== "pharmacist" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="walletId">
+                    Wallet Address
+                    <span className="text-destructive text-xs ml-1">*</span>
+                  </Label>
+                  <Input
+                    id="walletId"
+                    name="walletId"
+                    placeholder="0x..."
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Connect your MetaMask wallet to get your address.
+                  </p>
+                </div>
+              )}
 
               <Button type="submit" className="w-full cursor-pointer" disabled={loading}>
                 {loading ? <Spinner /> : "Create Account"}

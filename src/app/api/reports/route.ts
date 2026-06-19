@@ -102,33 +102,83 @@ export async function GET(req: Request) {
           );
 
     // ================== STATUS DATA (Current Products) ==================
+    // Query products with owner role to determine journey-completed count
     const statusCountsQuery = db
       .select({
         status: productsTable.status,
+        ownerRole: usersTable.role,
         count: count(),
       })
-      .from(productsTable);
+      .from(productsTable)
+      .leftJoin(usersTable, eq(productsTable.currentOwnerId, usersTable.id));
     if (productFilter) statusCountsQuery.where(productFilter);
-    const statusCounts = await statusCountsQuery.groupBy(productsTable.status);
+    const statusCounts = await statusCountsQuery.groupBy(productsTable.status, usersTable.role);
 
     const statusMap: Record<string, number> = {
       Verified: 0,
-      Pending: 0,
+      Complete: 0,
       Expired: 0,
     };
     for (const row of statusCounts) {
-      if (statusMap[row.status] !== undefined) {
-        statusMap[row.status] = row.count;
+      if (row.status === "Verified") {
+        statusMap["Verified"] += row.count;
+      }
+      if (row.status === "Expired") {
+        statusMap["Expired"] += row.count;
+      }
+      // Journey completed: sold to consumer OR currently owned by pharmacist
+      if (row.status === "Sold" || row.ownerRole === "pharmacist") {
+        statusMap["Complete"] += row.count;
       }
     }
 
     const statusData = [
       { name: "Verified", value: statusMap["Verified"], color: "#10b981" },
-      { name: "Pending", value: statusMap["Pending"], color: "#f59e0b" },
+      { name: "Complete", value: statusMap["Complete"], color: "#3b82f6" },
       { name: "Expired", value: statusMap["Expired"], color: "#ef4444" },
     ];
 
-    // ================== PERFORMANCE DATA & TRANSACTION DATA ==================
+    // ================== PERFORMANCE DATA (Product-based) ==================
+    // Query products grouped by creation date, counting total, journey completed, and expired
+    const prodPerfRows = await db
+      .select({
+        date: sql<string>`TO_CHAR(${productsTable.createdAt}, 'YYYY-MM-DD')`,
+        status: productsTable.status,
+        ownerRole: usersTable.role,
+        count: count(),
+      })
+      .from(productsTable)
+      .leftJoin(usersTable, eq(productsTable.currentOwnerId, usersTable.id))
+      .where(
+        productFilter
+          ? and(gte(productsTable.createdAt, startDate), productFilter)
+          : gte(productsTable.createdAt, startDate)
+      )
+      .groupBy(
+        sql`TO_CHAR(${productsTable.createdAt}, 'YYYY-MM-DD')`,
+        productsTable.status,
+        usersTable.role,
+      );
+
+    const perfMap = new Map<string, { totalProducts: number; journeyCompleted: number; expired: number }>();
+
+    for (const row of prodPerfRows) {
+      if (!perfMap.has(row.date)) {
+        perfMap.set(row.date, { totalProducts: 0, journeyCompleted: 0, expired: 0 });
+      }
+      const p = perfMap.get(row.date)!;
+      p.totalProducts += row.count;
+
+      // Journey completed: sold to consumer OR currently owned by pharmacist
+      if (row.status === "Sold" || row.ownerRole === "pharmacist") {
+        p.journeyCompleted += row.count;
+      }
+      if (row.status === "Expired") {
+        p.expired += row.count;
+      }
+    }
+
+    // ================== TRANSACTION DATA ==================
     const txDateFilter = gte(transactionsTable.createdAt, startDate);
     const txWhereClause = txFilter ? and(txDateFilter, txFilter) : txDateFilter;
 
@@ -142,27 +192,15 @@ export async function GET(req: Request) {
       .where(txWhereClause)
       .groupBy(sql`TO_CHAR(${transactionsTable.createdAt}, 'YYYY-MM-DD')`, transactionsTable.status);
 
-    const perfMap = new Map<string, { completed: number; pending: number; delayed: number }>();
     const transMap = new Map<string, { transactions: number; value: number }>();
 
     for (const row of txRows) {
-      if (!perfMap.has(row.date)) {
-        perfMap.set(row.date, { completed: 0, pending: 0, delayed: 0 });
-      }
       if (!transMap.has(row.date)) {
         transMap.set(row.date, { transactions: 0, value: 0 });
       }
-
-      const p = perfMap.get(row.date)!;
       const t = transMap.get(row.date)!;
-      
       t.transactions += row.count;
-      // Mocking value for visual purpose ($100 per tx approx)
-      t.value += row.count * 150; 
-
-      if (row.status === "Confirmed") p.completed += row.count;
-      else if (row.status === "Pending") p.pending += row.count;
-      else if (row.status === "Failed") p.delayed += row.count;
+      t.value += row.count * 150;
     }
 
     let performanceData;
@@ -170,37 +208,33 @@ export async function GET(req: Request) {
 
     // Grouping for larger ranges
     if (timeRange === "1year" || timeRange === "90days" || timeRange === "30days") {
-       // Group by week or month if needed. For simplicity, since the generic dashboard takes "date" or "month", 
-       // let's just return daily or formatted logic. The frontend chart handles array of objects.
-       // Let's condense if it's 1year? Recharts can handle 365 points, but it's crowded.
-       // Let's just group by month for 1 year, week for 90 days.
        if (timeRange === "1year") {
          const monthMap = new Map<string, any>();
          for (const date of dateKeys) {
            const d = new Date(date);
            const m = d.toLocaleString('default', { month: 'short' });
-           if (!monthMap.has(m)) monthMap.set(m, { month: m, completed: 0, pending: 0, delayed: 0, transactions: 0, value: 0, date: m });
+           if (!monthMap.has(m)) monthMap.set(m, { month: m, totalProducts: 0, journeyCompleted: 0, expired: 0, transactions: 0, value: 0, date: m });
            
            const mm = monthMap.get(m)!;
            const p = perfMap.get(date);
            const t = transMap.get(date);
            if (p) {
-             mm.completed += p.completed; mm.pending += p.pending; mm.delayed += p.delayed;
+             mm.totalProducts += p.totalProducts; mm.journeyCompleted += p.journeyCompleted; mm.expired += p.expired;
            }
            if (t) {
              mm.transactions += t.transactions; mm.value += t.value;
            }
          }
          const arr = Array.from(monthMap.values());
-         performanceData = arr.map(a => ({ month: a.month, completed: a.completed, pending: a.pending, delayed: a.delayed }));
+         performanceData = arr.map(a => ({ month: a.month, totalProducts: a.totalProducts, journeyCompleted: a.journeyCompleted, expired: a.expired }));
          transactionData = arr.map(a => ({ date: a.date, transactions: a.transactions, value: a.value }));
        } else if (timeRange === "90days" || timeRange === "30days") {
          // return daily
          performanceData = dateKeys.map(d => ({
             month: d, 
-            completed: perfMap.get(d)?.completed || 0,
-            pending: perfMap.get(d)?.pending || 0,
-            delayed: perfMap.get(d)?.delayed || 0,
+            totalProducts: perfMap.get(d)?.totalProducts || 0,
+            journeyCompleted: perfMap.get(d)?.journeyCompleted || 0,
+            expired: perfMap.get(d)?.expired || 0,
          }));
          transactionData = dateKeys.map(d => ({
             date: d,
@@ -211,9 +245,9 @@ export async function GET(req: Request) {
          // 7days
          performanceData = dateKeys.map(d => ({
             month: d, 
-            completed: perfMap.get(d)?.completed || 0,
-            pending: perfMap.get(d)?.pending || 0,
-            delayed: perfMap.get(d)?.delayed || 0,
+            totalProducts: perfMap.get(d)?.totalProducts || 0,
+            journeyCompleted: perfMap.get(d)?.journeyCompleted || 0,
+            expired: perfMap.get(d)?.expired || 0,
          }));
          transactionData = dateKeys.map(d => ({
             date: d,
@@ -224,9 +258,9 @@ export async function GET(req: Request) {
     } else {
       performanceData = dateKeys.map(d => ({
         month: d, 
-        completed: perfMap.get(d)?.completed || 0,
-        pending: perfMap.get(d)?.pending || 0,
-        delayed: perfMap.get(d)?.delayed || 0,
+        totalProducts: perfMap.get(d)?.totalProducts || 0,
+        journeyCompleted: perfMap.get(d)?.journeyCompleted || 0,
+        expired: perfMap.get(d)?.expired || 0,
      }));
      transactionData = dateKeys.map(d => ({
         date: d,
@@ -282,20 +316,47 @@ export async function GET(req: Request) {
       and(prevProdWhereClause, eq(productsTable.status, "Verified"))
     );
 
-    const [currentPending] = await db.select({ count: count() }).from(productsTable).where(
-      and(prodWhereClause, eq(productsTable.status, "Pending"))
+    // Expired products
+    const [currentExpired] = await db.select({ count: count() }).from(productsTable).where(
+      and(prodWhereClause, eq(productsTable.status, "Expired"))
     );
-    const [prevPending] = await db.select({ count: count() }).from(productsTable).where(
-      and(prevProdWhereClause, eq(productsTable.status, "Pending"))
+    const [prevExpired] = await db.select({ count: count() }).from(productsTable).where(
+      and(prevProdWhereClause, eq(productsTable.status, "Expired"))
     );
 
-    // Let's define alerts as Failed transactions
-    const [currentAlerts] = await db.select({ count: count() }).from(transactionsTable).where(
-      and(txWhereClause, eq(transactionsTable.status, "Failed"))
-    );
-    const [prevAlerts] = await db.select({ count: count() }).from(transactionsTable).where(
-      and(prevTxWhereClause, eq(transactionsTable.status, "Failed"))
-    );
+    // Journey completed: products that reached the end of the supply chain
+    // Either sold to a consumer (status = "Sold") or currently owned by a pharmacist
+    const currentJourneyBase = db
+      .select({ count: count() })
+      .from(productsTable)
+      .leftJoin(usersTable, eq(productsTable.currentOwnerId, usersTable.id))
+      .where(
+        and(
+          prodDateFilter,
+          productFilter,
+          or(
+            eq(productsTable.status, "Sold"),
+            eq(usersTable.role, "pharmacist"),
+          ),
+        )
+      );
+    const [currentJourney] = await currentJourneyBase;
+
+    const prevJourneyBase = db
+      .select({ count: count() })
+      .from(productsTable)
+      .leftJoin(usersTable, eq(productsTable.currentOwnerId, usersTable.id))
+      .where(
+        and(
+          prevProdDateFilter,
+          productFilter,
+          or(
+            eq(productsTable.status, "Sold"),
+            eq(usersTable.role, "pharmacist"),
+          ),
+        )
+      );
+    const [prevJourney] = await prevJourneyBase;
 
     const calcChange = (current: number, prev: number) => {
       if (prev === 0) return current > 0 ? "+100%" : "0%";
@@ -319,65 +380,114 @@ export async function GET(req: Request) {
         color: "text-green-500",
       },
       {
-        title: "Pending Verification",
-        value: currentPending.count.toString(),
-        change: calcChange(currentPending.count, prevPending.count),
+        title: "Expired",
+        value: currentExpired.count.toString(),
+        change: calcChange(currentExpired.count, prevExpired.count),
         icon: "Clock",
         color: "text-orange-500",
       },
       {
-        title: "Alerts",
-        value: currentAlerts.count.toString(),
-        change: calcChange(currentAlerts.count, prevAlerts.count),
-        icon: "AlertTriangle",
-        color: "text-red-500",
+        title: "Journey Completed",
+        value: currentJourney.count.toString(),
+        change: calcChange(currentJourney.count, prevJourney.count),
+        icon: "Package",
+        color: "text-purple-500",
       },
     ];
 
     // ================== PARTNERS DATA ==================
-    // Downstream partners performance
-    // Get transactions where this user is fromUserId
-    const toUserAlias = alias(usersTable, "to_user");
-    const partnersQuery = db
-      .select({
-        partner: toUserAlias.fullName,
-        count: count(),
-        status: transactionsTable.status,
-      })
-      .from(transactionsTable)
-      .innerJoin(toUserAlias, eq(transactionsTable.toUserId, toUserAlias.id))
-      .where(and(gte(transactionsTable.createdAt, startDate), eq(transactionsTable.fromUserId, user.id)))
-      .groupBy(toUserAlias.fullName, transactionsTable.status);
-    
-    const partnersResult = await partnersQuery;
-    const pMap = new Map<string, { onTime: number; delayed: number }>();
-    for (const r of partnersResult) {
-      if (!pMap.has(r.partner)) pMap.set(r.partner, { onTime: 0, delayed: 0 });
-      const pm = pMap.get(r.partner)!;
-      if (r.status === "Confirmed") pm.onTime += r.count;
-      if (r.status === "Failed" || r.status === "Pending") pm.delayed += r.count; // consider pending as delayed for metric
-    }
+    // Product-based partner performance: totalProducts, completed, expired per partner
+    // Find partners by looking at transactions where this user received products
+    const fromUserAlias = alias(usersTable, "from_user");
+    const ownerAlias = alias(usersTable, "owner_user");
 
-    const partnersData = Array.from(pMap.entries()).map(([partner, data]) => {
-        // Calculate percentages
-        const total = data.onTime + data.delayed;
-        if (total === 0) return { partner, onTime: 0, delayed: 0 };
-        return {
-          partner,
-          onTime: Math.round((data.onTime / total) * 100),
-          delayed: Math.round((data.delayed / total) * 100),
-        };
-    }).slice(0, 5); // Limit to top 5 partners
+    if (user.role === "admin") {
+      // Admin: show per-manufacturer product stats
+      const adminPartnersRows = await db
+        .select({
+          partner: usersTable.fullName,
+          status: productsTable.status,
+          ownerRole: ownerAlias.role,
+          count: count(),
+        })
+        .from(productsTable)
+        .innerJoin(usersTable, eq(productsTable.manufacturerId, usersTable.id))
+        .leftJoin(ownerAlias, eq(productsTable.currentOwnerId, ownerAlias.id))
+        .where(gte(productsTable.createdAt, startDate))
+        .groupBy(usersTable.fullName, productsTable.status, ownerAlias.role);
+
+      const pMap = new Map<string, { totalProducts: number; completed: number; expired: number }>();
+      for (const r of adminPartnersRows) {
+        if (!pMap.has(r.partner)) pMap.set(r.partner, { totalProducts: 0, completed: 0, expired: 0 });
+        const pm = pMap.get(r.partner)!;
+        pm.totalProducts += r.count;
+        if (r.status === "Sold" || r.ownerRole === "pharmacist") pm.completed += r.count;
+        if (r.status === "Expired") pm.expired += r.count;
+      }
+
+      var partnersData = Array.from(pMap.entries()).map(([partner, data]) => ({
+        partner,
+        totalProducts: data.totalProducts,
+        completed: data.completed,
+        expired: data.expired,
+      })).slice(0, 5);
+    } else {
+      // Non-admin: show the user's own performance stats
+      // Manufacturer: products they manufactured
+      // Distributor/Wholesaler: products they currently own or have handled
+      const ownProductFilter =
+        user.role === "manufacturer"
+          ? eq(productsTable.manufacturerId, user.id)
+          : eq(productsTable.currentOwnerId, user.id);
+
+      const ownPerfRows = await db
+        .select({
+          status: productsTable.status,
+          ownerRole: ownerAlias.role,
+          count: count(),
+        })
+        .from(productsTable)
+        .leftJoin(ownerAlias, eq(productsTable.currentOwnerId, ownerAlias.id))
+        .where(
+          and(
+            gte(productsTable.createdAt, startDate),
+            ownProductFilter,
+          )
+        )
+        .groupBy(productsTable.status, ownerAlias.role);
+
+      let ownTotal = 0, ownCompleted = 0, ownExpired = 0;
+      for (const r of ownPerfRows) {
+        ownTotal += r.count;
+        if (r.status === "Sold" || r.ownerRole === "pharmacist") ownCompleted += r.count;
+        if (r.status === "Expired") ownExpired += r.count;
+      }
+
+      var partnersData = [{
+        partner: user.fullName,
+        totalProducts: ownTotal,
+        completed: ownCompleted,
+        expired: ownExpired,
+      }];
+    }
 
     // If partnersData is empty (e.g., admin or leaf node), we can provide a default or leave it empty.
     
     // Summary values
+    // For on-time delivery rate, use failed transactions count
+    const [currentFailedTx] = await db.select({ count: count() }).from(transactionsTable).where(
+      and(txWhereClause, eq(transactionsTable.status, "Failed"))
+    );
+    const [prevFailedTx] = await db.select({ count: count() }).from(transactionsTable).where(
+      and(prevTxWhereClause, eq(transactionsTable.status, "Failed"))
+    );
+
     const onTimeDeliveryRate = currentTxCount.count > 0 
-      ? Math.round(((currentTxCount.count - currentAlerts.count) / currentTxCount.count) * 100 * 10) / 10 
+      ? Math.round(((currentTxCount.count - currentFailedTx.count) / currentTxCount.count) * 100 * 10) / 10 
       : 100;
 
     const prevOnTimeDeliveryRate = prevTxCount.count > 0 
-      ? Math.round(((prevTxCount.count - prevAlerts.count) / prevTxCount.count) * 100 * 10) / 10 
+      ? Math.round(((prevTxCount.count - prevFailedTx.count) / prevTxCount.count) * 100 * 10) / 10 
       : 100;
     
     const summary = {
@@ -397,6 +507,7 @@ export async function GET(req: Request) {
       metrics,
       partnersData,
       summary,
+      userRole: user.role,
     });
   } catch (error) {
     console.error("Error fetching reports data:", error);

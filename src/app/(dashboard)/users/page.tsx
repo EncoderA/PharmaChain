@@ -64,7 +64,7 @@ interface User {
   phone: string;
   role: "manufacturer" | "distributor" | "pharmacist" | "wholesaler" | "admin";
   organization: string;
-  walletId: string;
+  walletId: string | null;
   status: "active" | "pending" | "rejected";
 }
 
@@ -150,7 +150,7 @@ const UsersPage = () => {
           u.fullName.toLowerCase().includes(q) ||
           u.email?.toLowerCase().includes(q) ||
           u.organization.toLowerCase().includes(q) ||
-          u.walletId.toLowerCase().includes(q),
+          (u.walletId?.toLowerCase().includes(q) ?? false),
       );
     }
     return list;
@@ -178,15 +178,18 @@ const UsersPage = () => {
       // On-chain registration before off-chain if we are activating
       if (newStatus === "active" && user.status === "pending") {
         try {
-          // Normalize the wallet ID to lowercase to bypass strict ethers v6 EIP-55 checksum validation if the user provided mixed case
-          const safeWalletId = user.walletId.toLowerCase();
+          // Pharmacists don't have wallets, skip on-chain registration
+          if (user.walletId) {
+            // Normalize the wallet ID to lowercase to bypass strict ethers v6 EIP-55 checksum validation if the user provided mixed case
+            const safeWalletId = user.walletId.toLowerCase();
 
-          if (user.role === "manufacturer") {
-            await addManufacturer(safeWalletId);
-          } else if (user.role === "distributor") {
-            await addDistributor(safeWalletId);
-          } else if (user.role === "wholesaler") {
-            await addWholesaler(safeWalletId);
+            if (user.role === "manufacturer") {
+              await addManufacturer(safeWalletId);
+            } else if (user.role === "distributor") {
+              await addDistributor(safeWalletId);
+            } else if (user.role === "wholesaler") {
+              await addWholesaler(safeWalletId);
+            }
           }
           // The contract doesn't explicitly have pharmacist on-chain addition
         } catch (blockchainErr: any) {
@@ -220,14 +223,18 @@ const UsersPage = () => {
     setDeleteError(null);
     try {
       // Try to remove from blockchain first if they might be registered
-      if (deleteTarget.status === "active" || deleteTarget.status === "rejected") {
+      // Pharmacists are never registered on-chain, so skip blockchain removal for them
+      if (
+        deleteTarget.role !== "pharmacist" &&
+        (deleteTarget.status === "active" || deleteTarget.status === "rejected")
+      ) {
         try {
-          const safeWalletId = deleteTarget.walletId.toLowerCase();
-          await removeParticipant(safeWalletId);
+          const safeWalletId = deleteTarget.walletId?.toLowerCase();
+          if (safeWalletId) await removeParticipant(safeWalletId);
         } catch (blockchainErr: any) {
           const msg = blockchainErr?.message || "";
           // Ignore NotRegistered or execution reverted if they were never fully added
-          if (!msg.includes("NotRegistered") && !msg.includes("User is not registered") && !msg.includes("NotRegistered()")) {
+          if (!msg.includes("NotRegistered") && !msg.includes("User is not registered") && !msg.includes("NotRegistered()") && !msg.includes("0xaba47339")) {
             throw new Error("Blockchain deletion failed: " + msg);
           }
         }
@@ -419,9 +426,13 @@ const UsersPage = () => {
                           </td>
                           <td className="p-3 text-muted-foreground">{u.email ?? "—"}</td>
                           <td className="p-3">
-                            <Badge variant="secondary" className="font-mono text-xs">
-                              {u.walletId.slice(0, 6)}…{u.walletId.slice(-4)}
-                            </Badge>
+                            {u.walletId ? (
+                              <Badge variant="secondary" className="font-mono text-xs">
+                                {u.walletId.slice(0, 6)}…{u.walletId.slice(-4)}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">N/A</span>
+                            )}
                           </td>
                           <td className="p-3">
                             <Badge variant="outline" className={`flex items-center gap-1 w-fit capitalize ${statusConf.className}`}>
